@@ -55,23 +55,25 @@ bool RayIntersectsTriangle(float3 rayOrigin, float3 rayDir, float3 v0, float3 v1
 [numthreads(8,8,8)]
 void Voxelize (uint3 id : SV_DispatchThreadID)
 {
-    uint3 index = uint3(id.x, id.y, id.z);
+    if(id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution)
+    return;
 
-    //Early exit
-    if(index.x >= _Resolution || index.y >= _Resolution || index.z >= _Resolution)
-    {
-        return;
-    }
-
-    //Calculate the position in 3D space
     float3 centerOffset = _VoxelSize / 2.0;
-    float3 position = float3(index.xyz) * _VoxelSize + centerOffset;
+    float3 position = float3(id.xyz) * _VoxelSize + centerOffset;
 
+    // 6 ray directions
+    float3 rayDirs[6] = {
+        float3(1, 0, 0),
+        float3(- 1, 0, 0),
+        float3(0, 1, 0),
+        float3(0, - 1, 0),
+        float3(0, 0, 1),
+        float3(0, 0, - 1)
+    };
 
+    int intersections[6] = {0, 0, 0, 0, 0, 0};
 
-
-    int hitCount = 0;
-    float3 rayDir = float3(1, 1, 0); // + X direction
+    int insideVotes = 0;
 
     for (uint tri = 0; tri < _TriangleCount; tri ++)
     {
@@ -83,21 +85,39 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
         float3 v1 = _VertexPositionsIn[i1].position;
         float3 v2 = _VertexPositionsIn[i2].position;
 
-        //Add an offset to the Vertecies
+        // Adjust if bounds are negative
         if(_BoundsMin.x < 0 || _BoundsMin.y < 0 || _BoundsMin.z < 0)
         {
-            v0 = v0 + abs(_BoundsMin);
-            v1 = v1 + abs(_BoundsMin);
-            v2 = v2 + abs(_BoundsMin);
+            float3 offset = abs(_BoundsMin);
+            v0 += offset;
+            v1 += offset;
+            v2 += offset;
         }
-        if (RayIntersectsTriangle(position, rayDir, v0, v1, v2))
+
+        for (int dir = 0; dir < 6; dir ++)
         {
-            hitCount ++;
+            float3 rayDir = rayDirs[dir];
+
+            if (RayIntersectsTriangle(position, rayDir, v0, v1, v2))
+            {
+                intersections[dir] ++;
+            }
         }
     }
 
-    bool inMesh = (hitCount % 2) == 1;
-    _VoxelTexture[index] = inMesh ? 1 : 0;
+
+    // Parity check all axis
+    for (int dir = 0; dir < 6; dir ++)
+    {
+        if ((intersections[dir] % 2) == 1)
+        {
+            insideVotes ++;
+        }
+    }
+
+    // Majority rule: at least 3/6 say "inside"
+    bool inMesh = insideVotes >= 3;
+    _VoxelTexture[id.xyz] = inMesh ? 1 : 0;
 }
 
 

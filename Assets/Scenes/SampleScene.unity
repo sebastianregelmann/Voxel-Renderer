@@ -289,8 +289,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   shader: {fileID: 7200000, guid: 75ec3187f1ba88a40b85b30076607471, type: 3}
-  mesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
-  resolution: 512
+  mesh: {fileID: -4041163356895272288, guid: 55db7a3b071d2e34d87ea5ea9d0c6502, type: 3}
+  resolution: 2
+  drawVoxelGizmos: 1
 --- !u!4 &769367800
 Transform:
   m_ObjectHideFlags: 0
