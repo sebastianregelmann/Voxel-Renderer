@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using SysDebug = System.Diagnostics;
+using UnityEngine.Rendering;
 
 public class Shadermanager : MonoBehaviour
 {
@@ -13,6 +14,8 @@ public class Shadermanager : MonoBehaviour
     [Header("Settings")]
     [Min(1)]
     public int resolution = 1;
+    [Min(2)]
+    public int chunkLimit = 100;
 
 
     //Compute Buffers
@@ -23,6 +26,7 @@ public class Shadermanager : MonoBehaviour
 
     //Kernel Indexes
     private int kernelVoxelize;
+    private int kernelVoxelizeChunk;
     private int kernelReadBack;
 
     //Helper variables
@@ -85,7 +89,10 @@ public class Shadermanager : MonoBehaviour
     private void GetKernelIDs()
     {
         kernelVoxelize = shader.FindKernel("Voxelize");
+        kernelVoxelizeChunk = shader.FindKernel("VoxelizeChunk");
+
         kernelReadBack = shader.FindKernel("ReadBackTexture");
+
     }
 
     private void SetMeshRelatedVariables()
@@ -104,6 +111,7 @@ public class Shadermanager : MonoBehaviour
             throw new System.Exception("No Mesh Asigned");
         }
 
+
         stopwatch.Start();
 
         //Release buffer if old one exists
@@ -116,7 +124,6 @@ public class Shadermanager : MonoBehaviour
 
         SetMeshRelatedVariables();
 
-
         //Create the Buffers
         triangleIndicesBuffer = new ComputeBuffer(triangleCount, sizeof(int));
         vertexPositionsBuffer = new ComputeBuffer(vertexCount, sizeof(float) * 3);
@@ -127,6 +134,11 @@ public class Shadermanager : MonoBehaviour
         triangleIndicesBuffer.SetData(mesh.triangles);
         vertexPositionsBuffer.SetData(mesh.vertices);
 
+        if (resolution >= chunkLimit)
+        {
+            DispatchVoxelizeChunks();
+            return;
+        }
 
         //Assing Buffers for shader
         shader.SetBuffer(kernelVoxelize, "_TriangleIndicesIn", triangleIndicesBuffer);
@@ -150,10 +162,75 @@ public class Shadermanager : MonoBehaviour
         //Dispatch the shader
         shader.Dispatch(kernelVoxelize, threadCount.x, threadCount.y, threadCount.z);
 
+
+        // Insert a fence and wait for GPU to finish
+        GraphicsFence fence = Graphics.CreateGraphicsFence(GraphicsFenceType.AsyncQueueSynchronisation, SynchronisationStageFlags.ComputeProcessing);
+        Graphics.WaitOnAsyncGraphicsFence(fence); // CPU blocks here until GPU completes
+
         stopwatch.Stop();
         timeVoxelize = stopwatch.ElapsedMilliseconds;
         Debug.Log("Time Voxilaze: " + timeVoxelize + "ms");
     }
+
+
+
+    private void DispatchVoxelizeChunks()
+    {
+        // Set buffers once (they don't change per chunk)
+        shader.SetBuffer(kernelVoxelizeChunk, "_TriangleIndicesIn", triangleIndicesBuffer);
+        shader.SetBuffer(kernelVoxelizeChunk, "_VertexPositionsIn", vertexPositionsBuffer);
+        shader.SetTexture(kernelVoxelizeChunk, "_VoxelTexture", voxelTexture);
+
+        // Set constant variables
+        shader.SetInt("_TriangleCount", mesh.triangles.Length);
+        shader.SetInt("_Resolution", resolution);
+        shader.SetFloat("_VoxelSize", voxelSize);
+        shader.SetVector("_BoundsMin", boundsMin);
+        shader.SetVector("_BoundsMax", boundsMax);
+
+        // Decide chunk size (e.g., 32x32x32) to avoid huge dispatches
+        int chunkSize = Mathf.Min(chunkLimit, resolution);
+        Vector3Int threadGroupSize = GetThreadGroupSize(kernelVoxelizeChunk);
+
+        // Loop over all chunks
+        for (int x = 0; x < resolution; x += chunkSize)
+        {
+            for (int y = 0; y < resolution; y += chunkSize)
+            {
+                for (int z = 0; z < resolution; z += chunkSize)
+                {
+                    // Set the current chunk start and size
+                    Vector3Int currentChunkSize = new Vector3Int(
+                        Mathf.Min(chunkSize, resolution - x),
+                        Mathf.Min(chunkSize, resolution - y),
+                        Mathf.Min(chunkSize, resolution - z)
+                    );
+
+                    shader.SetInts("_ChunkStart", x, y, z);
+                    shader.SetInts("_ChunkSize", currentChunkSize.x, currentChunkSize.y, currentChunkSize.z);
+
+                    // Compute number of thread groups for this chunk
+                    Vector3Int threadCount = new Vector3Int(
+                        Mathf.CeilToInt((float)currentChunkSize.x / threadGroupSize.x),
+                        Mathf.CeilToInt((float)currentChunkSize.y / threadGroupSize.y),
+                        Mathf.CeilToInt((float)currentChunkSize.z / threadGroupSize.z)
+                    );
+
+                    // Dispatch this chunk
+                    shader.Dispatch(kernelVoxelizeChunk, threadCount.x, threadCount.y, threadCount.z);
+                }
+            }
+        }
+
+        // Insert a fence and wait for GPU to finish
+        GraphicsFence fence = Graphics.CreateGraphicsFence(GraphicsFenceType.AsyncQueueSynchronisation, SynchronisationStageFlags.ComputeProcessing);
+        Graphics.WaitOnAsyncGraphicsFence(fence);
+
+        stopwatch.Stop();
+        timeVoxelize = stopwatch.ElapsedMilliseconds;
+        Debug.Log("Time Voxelize Chunks: " + timeVoxelize + "ms");
+    }
+
 
 
     RenderTexture CreateInt3DTexture(int width, int height, int depth)

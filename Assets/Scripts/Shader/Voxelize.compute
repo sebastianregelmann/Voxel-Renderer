@@ -1,6 +1,8 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel Voxelize
+#pragma kernel VoxelizeChunk
 #pragma kernel ReadBackTexture
+
 //Struct Definitions
 struct VertexPosition {
     float3 position;
@@ -16,6 +18,10 @@ uint _Resolution;
 float _VoxelSize;
 float3 _BoundsMin;
 float3 _BoundsMax;
+
+//Global Settings for chunked Voxelization
+uint3 _ChunkStart;
+uint3 _ChunkSize;
 
 //ResultTexture
 RWTexture3D<int> _VoxelTexture;
@@ -71,7 +77,7 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
         float3(0, 0, - 1)
     };
 
-    int intersections[6] = {0, 0, 0, 0, 0, 0};
+    uint intersections[6] = {0, 0, 0, 0, 0, 0};
 
     int insideVotes = 0;
 
@@ -118,6 +124,84 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
     // Majority rule: at least 3/6 say "inside"
     bool inMesh = insideVotes >= 3;
     _VoxelTexture[id.xyz] = inMesh ? 1 : 0;
+}
+
+
+[numthreads(8,8,8)]
+void VoxelizeChunk (uint3 id : SV_DispatchThreadID)
+{
+    //Check if thread is in chunk size
+    if(id.x >= _ChunkSize.x || id.y >= _ChunkSize.y || id.z >= _ChunkSize.z)
+    {
+        return;
+    }
+
+
+    //Check if id is in Resolution
+    uint3 globalID = id.xyz + _ChunkStart;
+    if(globalID.x >= _Resolution || globalID.y >= _Resolution || globalID.z >= _Resolution)
+    return;
+
+    float3 centerOffset = _VoxelSize / 2.0;
+    float3 position = float3(globalID.xyz) * _VoxelSize + centerOffset;
+
+    // 6 ray directions
+    float3 rayDirs[6] = {
+        float3(1, 0, 0),
+        float3(- 1, 0, 0),
+        float3(0, 1, 0),
+        float3(0, - 1, 0),
+        float3(0, 0, 1),
+        float3(0, 0, - 1)
+    };
+
+    uint intersections[6] = {0, 0, 0, 0, 0, 0};
+
+    int insideVotes = 0;
+
+    for (uint tri = 0; tri < _TriangleCount; tri ++)
+    {
+        int i0 = _TriangleIndicesIn[tri * 3 + 0];
+        int i1 = _TriangleIndicesIn[tri * 3 + 1];
+        int i2 = _TriangleIndicesIn[tri * 3 + 2];
+
+        float3 v0 = _VertexPositionsIn[i0].position;
+        float3 v1 = _VertexPositionsIn[i1].position;
+        float3 v2 = _VertexPositionsIn[i2].position;
+
+        // Adjust if bounds are negative
+        if(_BoundsMin.x < 0 || _BoundsMin.y < 0 || _BoundsMin.z < 0)
+        {
+            float3 offset = abs(_BoundsMin);
+            v0 += offset;
+            v1 += offset;
+            v2 += offset;
+        }
+
+        for (int dir = 0; dir < 6; dir ++)
+        {
+            float3 rayDir = rayDirs[dir];
+
+            if (RayIntersectsTriangle(position, rayDir, v0, v1, v2))
+            {
+                intersections[dir] ++;
+            }
+        }
+    }
+
+
+    // Parity check all axis
+    for (int dir = 0; dir < 6; dir ++)
+    {
+        if ((intersections[dir] % 2) == 1)
+        {
+            insideVotes ++;
+        }
+    }
+
+    // Majority rule: at least 3/6 say "inside"
+    bool inMesh = insideVotes >= 3;
+    _VoxelTexture[globalID.xyz] = inMesh ? 1 : 0;
 }
 
 
