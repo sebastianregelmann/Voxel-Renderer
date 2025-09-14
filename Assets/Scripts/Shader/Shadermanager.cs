@@ -8,6 +8,7 @@ public class Shadermanager : MonoBehaviour
     [Header("References")]
 
     public ComputeShader shader;
+    public Material renderMaterial;
     public Mesh mesh;
 
 
@@ -52,6 +53,7 @@ public class Shadermanager : MonoBehaviour
     {
         GetKernelIDs();
         DispatchVoxelize();
+        AssingValuesToRenderer();
         if (drawVoxelGizmos)
         {
             DebugReadBackRenderTexture();
@@ -64,6 +66,7 @@ public class Shadermanager : MonoBehaviour
         if (lastReslolution != resolution)
         {
             DispatchVoxelize();
+            AssingValuesToRenderer();
             if (drawVoxelGizmos)
             {
                 DebugReadBackRenderTexture();
@@ -268,6 +271,26 @@ public class Shadermanager : MonoBehaviour
 
         intBuffer.Release();
         intBuffer = null;
+    }
+
+
+    private void AssingValuesToRenderer()
+    {
+        //Check if texture exists
+        if (voxelTexture == null)
+        {
+            throw new System.Exception("No Voxel Texture");
+        }
+
+
+        //Set the texture
+        renderMaterial.SetTexture("_VoxelTexture", voxelTexture);
+
+        //Set the shader Variables
+        renderMaterial.SetInt("_Resolution", resolution);
+        renderMaterial.SetFloat("_VoxelSize", voxelSize);
+        renderMaterial.SetVector("_BoundsMin", boundsMin);
+        renderMaterial.SetVector("_BoundsMax", boundsMax);
     }
 
 
