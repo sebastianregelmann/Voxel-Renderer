@@ -31,89 +31,149 @@ Shader "Custom/VoxelRenderer_Optimized"
                 float3 dir;
             };
 
-            // Ray Marching / 3D DDA algorithm to traverse the voxel grid along a ray
-            // Returns true if the ray hits a solid voxel, and outputs the voxel coordinate
-            bool RayMarchVoxel(Ray ray, out uint3 voxelCoord)
-            {
-                // Compute intersection times with the voxel grid bounds along each axis
-                float3 tMin = (_BoundsMin - ray.origin) / ray.dir; // distance to min bound per axis
-                float3 tMax = (_BoundsMax - ray.origin) / ray.dir; // distance to max bound per axis
 
-                // Ensure t1 is the near intersection, t2 is the far intersection per axis
+            struct AABBPoints{
+                float3 entryPoint;
+                float3 exitPoint;
+            };
+
+            struct VoxelHit{
+                bool hit;
+                uint3 voxelCoordinate;
+                float3 hitPoint;
+                float depth;
+                int hitFace;
+            };
+
+
+            //Calculates the AABB intersection points with a grid
+            bool AABBGrid(float3 boundsMin, float3 boundsMax, Ray ray, out AABBPoints aabbPoints)
+            {
+                // Compute intersection distances (t values) with the bounding box on each axis
+                float3 invDir = 1.0 / ray.dir;
+
+                float3 tMin = (boundsMin - ray.origin) * invDir;
+                float3 tMax = (boundsMax - ray.origin) * invDir;
+
+                // Ensure tMin is the near side and tMax is the far side per axis
                 float3 t1 = min(tMin, tMax);
                 float3 t2 = max(tMin, tMax);
 
-                // tNear = largest entry time, tFar = smallest exit time
+                // Find largest entry time and smallest exit time
                 float tNear = max(max(t1.x, t1.y), t1.z);
                 float tFar = min(min(t2.x, t2.y), t2.z);
 
-                // If ray misses the bounds, return false
-                if (tNear > tFar || tFar < 0) return false;
+                // Check for miss : ray doesn't intersect or intersection is behind the origin
+                if (tNear > tFar || tFar < 0)
+                {
+                    return false;
+                }
 
-                // Compute starting position inside the voxel grid
-                float3 pos = ray.origin + max(tNear, 0) * ray.dir;
+                // Clamp tNear to 0 to ensure we're not going behind the ray
+                float clampedNear = max(tNear, 0.0);
 
-                // Convert world position to voxel indices (int3)
-                int3 voxel = int3(clamp(floor((pos - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
+                // Compute the actual entry and exit points
+                aabbPoints.entryPoint = ray.origin + clampedNear * ray.dir;
+                aabbPoints.exitPoint = ray.origin + tFar * ray.dir;
 
-                // Step direction along each axis : + 1 if ray moves positive, - 1 if negative
-                float3 step = sign(ray.dir);
+                //Clamp values to always be in the grid
+                aabbPoints.entryPoint = clamp(aabbPoints.entryPoint, boundsMin, boundsMax);
+                aabbPoints.exitPoint = clamp(aabbPoints.exitPoint, boundsMin, boundsMax);
 
-                // Distance along ray to cross one voxel along each axis
-                float3 tDelta = abs(_VoxelSize / ray.dir);
 
-                // Compute next voxel boundary along each axis
-                float3 voxelBorder = _BoundsMin + (voxel + step) * _VoxelSize;
-                float3 tMaxNext = (voxelBorder - ray.origin) / ray.dir;
+                return true;
+            }
 
-                // Loop through voxels along the ray
-                // Safety limit : max 3 * _Resolution steps (for non - cubic grids, adjust as needed)
+
+            AABBPoints NextVoxelAABBPoints(AABBPoints currentVoxelPoints, float3 stepDirection, float3 stepSize, int3 currentVoxel, out int3 nextVoxel)
+            {
+                AABBPoints nextPoints;
+                nextVoxel = currentVoxel;
+
+                // Set entry point to the current exit point
+                nextPoints.entryPoint = currentVoxelPoints.exitPoint;
+                nextPoints.exitPoint = currentVoxelPoints.exitPoint;
+
+                if (currentVoxelPoints.exitPoint.x < currentVoxelPoints.exitPoint.y)
+                {
+                    if (currentVoxelPoints.exitPoint.x < currentVoxelPoints.exitPoint.z)
+                    {
+                        nextVoxel.x += int(stepDirection.x); // Move to next voxel along X
+                        nextPoints.exitPoint.x += stepSize.x; // Update exit distance for X
+                    }
+                    else
+                    {
+                        nextVoxel.z += int(stepDirection.z); // Move to next voxel along Z
+                        nextPoints.exitPoint.z += stepSize.z;
+                    }
+                }
+                else
+                {
+                    if (currentVoxelPoints.exitPoint.y < currentVoxelPoints.exitPoint.z)
+                    {
+                        nextVoxel.y += int(stepDirection.y); // Move to next voxel along Y
+                        nextPoints.exitPoint.y += stepSize.y;
+                    }
+                    else
+                    {
+                        nextVoxel.z += int(stepDirection.z); // Move to next voxel along Z
+                        nextPoints.exitPoint.z += stepSize.z;
+                    }
+                }
+
+                return nextPoints;
+            }
+
+
+
+            bool RayMarchVoxel(Ray ray, out uint3 voxelCoord)
+            {
+                AABBPoints aabbPoints;
+
+                // Early out if the ray doesn't intersect the voxel grid bounds
+                if (! AABBGrid(_BoundsMin, _BoundsMax, ray, aabbPoints))
+                return false;
+
+                // Compute step direction (+ 1 or - 1 for each axis)
+                float3 stepDirection = sign(ray.dir);
+
+                // Distance required to cross one voxel along each axis
+                float3 stepSize = abs(_VoxelSize / ray.dir);
+
+                // Starting voxel index from entry point
+                int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
+
+                // Compute the exit point of the first voxel by intersecting voxel boundaries
+                float3 voxelBoundary = _BoundsMin + (float3(voxel) + stepDirection) * _VoxelSize;
+                float3 tMaxNext = (voxelBoundary - ray.origin) / ray.dir;
+
+                // Use tMaxNext to build the initial AABBPoints.exitPoint
+                aabbPoints.exitPoint = tMaxNext;
+
+                // Start ray marching
                 for (uint i = 0; i < _Resolution * 3; ++ i)
                 {
-                    // Check if current voxel is solid
-                    if (_VoxelTexture[voxel].r > 0)
+                    // Bounds check
+                    if (all(voxel >= 0) && all(voxel < int(_Resolution)))
                     {
-                        voxelCoord = uint3(voxel);
-                        return true; // Hit a solid voxel
-                    }
-
-                    // Determine which axis the ray exits next
-                    if (tMaxNext.x < tMaxNext.y)
-                    {
-                        if (tMaxNext.x < tMaxNext.z)
+                        if (_VoxelTexture[voxel].r > 0)
                         {
-                            voxel.x += int(step.x); // Move to next voxel along X
-                            tMaxNext.x += tDelta.x; // Update exit distance for X
-                        }
-                        else
-                        {
-                            voxel.z += int(step.z); // Move to next voxel along Z
-                            tMaxNext.z += tDelta.z;
+                            voxelCoord = uint3(voxel);
+                            return true;
                         }
                     }
                     else
                     {
-                        if (tMaxNext.y < tMaxNext.z)
-                        {
-                            voxel.y += int(step.y); // Move to next voxel along Y
-                            tMaxNext.y += tDelta.y;
-                        }
-                        else
-                        {
-                            voxel.z += int(step.z); // Move to next voxel along Z
-                            tMaxNext.z += tDelta.z;
-                        }
+                        break; // Exit if outside grid
                     }
 
-                    // Stop if voxel is out of bounds
-                    if (voxel.x < 0 || voxel.y < 0 || voxel.z < 0 ||
-                    voxel.x >= _Resolution || voxel.y >= _Resolution || voxel.z >= _Resolution)
-                    break;
+                    // Step to next voxel using your helper
+                    aabbPoints = NextVoxelAABBPoints(aabbPoints, stepDirection, stepSize, voxel, voxel);
                 }
 
-                // Ray exited the voxel grid without hitting a solid voxel
                 return false;
             }
+
 
 
             half4 frag(Varyings IN) : SV_Target
