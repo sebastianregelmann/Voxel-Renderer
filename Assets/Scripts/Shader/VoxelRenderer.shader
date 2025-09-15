@@ -177,7 +177,14 @@ Shader "Custom/VoxelRenderer_Optimized"
 
                 // Early out if the ray doesn't intersect the voxel grid
                 if (! AABBGrid(_BoundsMin, _BoundsMax, ray, aabbPoints))
-                return false;
+                {
+                    hit = (VoxelHit)0; // Initialize hit to avoid compiler errors
+                    return false;
+                }
+
+
+                aabbPoints.entryPoint += ray.dir * 0.0004;
+
 
                 // Step direction along each axis
                 float3 stepDirection = sign(ray.dir);
@@ -186,26 +193,32 @@ Shader "Custom/VoxelRenderer_Optimized"
                 // Starting voxel index from entry point
                 int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
 
-                // Compute exit points along each axis for first voxel
-                float3 voxelBoundary = _BoundsMin + (float3(voxel) + stepDirection) * _VoxelSize;
+                // -- - FIX START -- -
+                // Determine the next voxel boundary based on the ray's direction.
+                // If ray.dir.x > 0, the next boundary is at voxel.x + 1. If < 0, it's at voxel.x.
+                float3 bias = float3(ray.dir.x > 0 ? 1.0 : 0.0, ray.dir.y > 0 ? 1.0 : 0.0, ray.dir.z > 0 ? 1.0 : 0.0);
+                float3 voxelBoundary = _BoundsMin + (float3(voxel) + bias) * _VoxelSize;
+
+                // Correctly calculate the distance (t) to the next boundary from the ray's origin.
                 float3 tMaxNext = (voxelBoundary - ray.origin) / ray.dir;
-                aabbPoints.exitPoint = tMaxNext;
+                aabbPoints.exitPoint = tMaxNext; // We store the t - values in exitPoint for the DDA loop.
+                // -- - FIX END -- -
 
                 // Determine initial lastStepAxis based on which axis the ray hits first
-                float3 tEntry = (voxelBoundary - ray.origin) / ray.dir;
                 int lastStepAxis;
-                if (tEntry.x < tEntry.y && tEntry.x < tEntry.z)
+                if (tMaxNext.x < tMaxNext.y && tMaxNext.x < tMaxNext.z)
                 {
                     lastStepAxis = 0; // X
                 }
-                else if (tEntry.y < tEntry.z)
+                else if (tMaxNext.y < tMaxNext.z)
                 {
                     lastStepAxis = 1; // Y
                 }
                 else
                 {
-                    lastStepAxis = 2;
+                    lastStepAxis = 2; // Z
                 }
+
                 // Ray march loop
                 for (uint i = 0; i < _Resolution * 3; ++ i)
                 {
@@ -220,6 +233,7 @@ Shader "Custom/VoxelRenderer_Optimized"
                     }
                     else
                     {
+                        // Ray has exited the grid bounds
                         break;
                     }
 
@@ -227,9 +241,9 @@ Shader "Custom/VoxelRenderer_Optimized"
                     aabbPoints = NextVoxelAABBPoints(aabbPoints, stepDirection, stepSize, voxel, voxel, lastStepAxis);
                 }
 
+                hit = (VoxelHit)0; // Initialize hit to avoid compiler errors
                 return false;
             }
-
 
 
 
@@ -245,7 +259,7 @@ Shader "Custom/VoxelRenderer_Optimized"
                 VoxelHit hit;
                 if (RayMarchVoxel(ray, hit))
                 {
-                   // return float4(hit.hitUV.rg, 0, 1);
+                    // return float4(hit.hitUV.rg, 0, 1);
                     //Rendering Method
                     switch(hit.hitFace)
                     {
