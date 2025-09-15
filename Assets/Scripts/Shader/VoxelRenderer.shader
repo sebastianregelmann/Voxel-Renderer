@@ -41,10 +41,10 @@ Shader "Custom/VoxelRenderer_Optimized"
                 bool hit;
                 uint3 voxelCoordinate;
                 float3 hitPoint;
+                float2 hitUV;
                 float depth;
                 int hitFace;
             };
-
 
             //Calculates the AABB intersection points with a grid
             bool AABBGrid(float3 boundsMin, float3 boundsMax, Ray ray, out AABBPoints aabbPoints)
@@ -85,12 +85,10 @@ Shader "Custom/VoxelRenderer_Optimized"
             }
 
 
-            AABBPoints NextVoxelAABBPoints(AABBPoints currentVoxelPoints, float3 stepDirection, float3 stepSize, int3 currentVoxel, out int3 nextVoxel)
+            AABBPoints NextVoxelAABBPoints(AABBPoints currentVoxelPoints, float3 stepDirection, float3 stepSize, int3 currentVoxel, out int3 nextVoxel, out int lastStepAxis)
             {
                 AABBPoints nextPoints;
                 nextVoxel = currentVoxel;
-
-                // Set entry point to the current exit point
                 nextPoints.entryPoint = currentVoxelPoints.exitPoint;
                 nextPoints.exitPoint = currentVoxelPoints.exitPoint;
 
@@ -98,81 +96,140 @@ Shader "Custom/VoxelRenderer_Optimized"
                 {
                     if (currentVoxelPoints.exitPoint.x < currentVoxelPoints.exitPoint.z)
                     {
-                        nextVoxel.x += int(stepDirection.x); // Move to next voxel along X
-                        nextPoints.exitPoint.x += stepSize.x; // Update exit distance for X
+                        nextVoxel.x += int(stepDirection.x);
+                        nextPoints.exitPoint.x += stepSize.x;
+                        lastStepAxis = 0;
                     }
                     else
                     {
-                        nextVoxel.z += int(stepDirection.z); // Move to next voxel along Z
+                        nextVoxel.z += int(stepDirection.z);
                         nextPoints.exitPoint.z += stepSize.z;
+                        lastStepAxis = 2;
                     }
                 }
                 else
                 {
                     if (currentVoxelPoints.exitPoint.y < currentVoxelPoints.exitPoint.z)
                     {
-                        nextVoxel.y += int(stepDirection.y); // Move to next voxel along Y
+                        nextVoxel.y += int(stepDirection.y);
                         nextPoints.exitPoint.y += stepSize.y;
+                        lastStepAxis = 1;
                     }
                     else
                     {
-                        nextVoxel.z += int(stepDirection.z); // Move to next voxel along Z
+                        nextVoxel.z += int(stepDirection.z);
                         nextPoints.exitPoint.z += stepSize.z;
+                        lastStepAxis = 2;
                     }
                 }
-
                 return nextPoints;
             }
 
 
 
-            bool RayMarchVoxel(Ray ray, out uint3 voxelCoord)
+            VoxelHit GetVoxelHit(int3 voxelCoordinate, AABBPoints aabbPoints, int lastStepAxis, float3 stepDirection)
+            {
+                // Calculate the voxel's world bounds
+                float3 voxelMin = _BoundsMin + float3(voxelCoordinate) * _VoxelSize;
+                float3 voxelMax = voxelMin + _VoxelSize;
+
+                VoxelHit hit;
+                hit.hit = true;
+                hit.voxelCoordinate = uint3(voxelCoordinate);
+                hit.hitPoint = aabbPoints.entryPoint;
+                hit.depth = 1.0;
+
+                // Determine the hit face based on the last axis stepped
+                // 0 = - X, 1 = + X, 2 = - Y, 3 = + Y, 4 = - Z, 5 = + Z
+                hit.hitFace = lastStepAxis * 2 + (stepDirection[lastStepAxis] > 0 ? 1 : 0);
+
+                // UV calculation for the face
+                float2 uv;
+                float3 p = aabbPoints.entryPoint;
+
+                switch(hit.hitFace)
+                {
+                    case 0 : case 1 : // X faces → YZ plane
+                    uv = (p.yz - voxelMin.yz) / _VoxelSize;
+                    break;
+                    case 2 : case 3 : // Y faces → XZ plane
+                    uv = (p.xz - voxelMin.xz) / _VoxelSize;
+                    break;
+                    case 4 : case 5 : // Z faces → XY plane
+                    uv = (p.xy - voxelMin.xy) / _VoxelSize;
+                    break;
+                    default :
+                    uv = float2(0.0, 0.0);
+                    break;
+                }
+
+                hit.hitUV = uv;
+                return hit;
+            }
+
+
+
+
+
+            bool RayMarchVoxel(Ray ray, out VoxelHit hit)
             {
                 AABBPoints aabbPoints;
 
-                // Early out if the ray doesn't intersect the voxel grid bounds
+                // Early out if the ray doesn't intersect the voxel grid
                 if (! AABBGrid(_BoundsMin, _BoundsMax, ray, aabbPoints))
                 return false;
 
-                // Compute step direction (+ 1 or - 1 for each axis)
+                // Step direction along each axis
                 float3 stepDirection = sign(ray.dir);
-
-                // Distance required to cross one voxel along each axis
                 float3 stepSize = abs(_VoxelSize / ray.dir);
 
                 // Starting voxel index from entry point
                 int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
 
-                // Compute the exit point of the first voxel by intersecting voxel boundaries
+                // Compute exit points along each axis for first voxel
                 float3 voxelBoundary = _BoundsMin + (float3(voxel) + stepDirection) * _VoxelSize;
                 float3 tMaxNext = (voxelBoundary - ray.origin) / ray.dir;
-
-                // Use tMaxNext to build the initial AABBPoints.exitPoint
                 aabbPoints.exitPoint = tMaxNext;
 
-                // Start ray marching
+                // Determine initial lastStepAxis based on which axis the ray hits first
+                float3 tEntry = (voxelBoundary - ray.origin) / ray.dir;
+                int lastStepAxis;
+                if (tEntry.x < tEntry.y && tEntry.x < tEntry.z)
+                {
+                    lastStepAxis = 0; // X
+                }
+                else if (tEntry.y < tEntry.z)
+                {
+                    lastStepAxis = 1; // Y
+                }
+                else
+                {
+                    lastStepAxis = 2;
+                }
+                // Ray march loop
                 for (uint i = 0; i < _Resolution * 3; ++ i)
                 {
-                    // Bounds check
+                    // Check if voxel is inside grid
                     if (all(voxel >= 0) && all(voxel < int(_Resolution)))
                     {
                         if (_VoxelTexture[voxel].r > 0)
                         {
-                            voxelCoord = uint3(voxel);
+                            hit = GetVoxelHit(voxel, aabbPoints, lastStepAxis, stepDirection);
                             return true;
                         }
                     }
                     else
                     {
-                        break; // Exit if outside grid
+                        break;
                     }
 
-                    // Step to next voxel using your helper
-                    aabbPoints = NextVoxelAABBPoints(aabbPoints, stepDirection, stepSize, voxel, voxel);
+                    // Step to next voxel
+                    aabbPoints = NextVoxelAABBPoints(aabbPoints, stepDirection, stepSize, voxel, voxel, lastStepAxis);
                 }
 
                 return false;
             }
+
 
 
 
@@ -185,9 +242,30 @@ Shader "Custom/VoxelRenderer_Optimized"
                 ray.origin = _WorldSpaceCameraPos;
                 ray.dir = normalize(worldPos - _WorldSpaceCameraPos);
 
-                uint3 voxelCoord;
-                if (RayMarchVoxel(ray, voxelCoord))
+                VoxelHit hit;
+                if (RayMarchVoxel(ray, hit))
                 {
+                   // return float4(hit.hitUV.rg, 0, 1);
+                    //Rendering Method
+                    switch(hit.hitFace)
+                    {
+                        case 0 :
+                        return float4(1, 0.5, 0, 1);
+                        case 1 :
+                        return float4(1, 0, 0, 1);
+                        case 2 :
+                        return float4(0, 1, 0.5, 1);
+                        case 3 :
+                        return float4(0, 1, 0, 1);
+                        case 4 :
+                        return float4(0.5, 0, 1, 1);
+                        case 5 :
+                        return float4(0, 0, 1, 1);
+                        default :
+                        return float4(0.3, .3, .3, 1);
+                    }
+
+
                     return float4(1, 1, 1, 1); // Hit voxel
                 }
                 else
