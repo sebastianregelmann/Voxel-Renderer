@@ -85,44 +85,73 @@ Shader "Custom/VoxelRenderer_Optimized"
             }
 
 
-            AABBPoints NextVoxelAABBPoints(AABBPoints currentVoxelPoints, float3 stepDirection, float3 stepSize, int3 currentVoxel, out int3 nextVoxel, out int lastStepAxis)
+            AABBPoints NextVoxelAABBPoints(AABBPoints currentPoints, Ray ray, inout float3 tMax, float3 stepSize, inout int3 currentVoxel, float3 stepDirection, out int lastStepAxis)
             {
                 AABBPoints nextPoints;
-                nextVoxel = currentVoxel;
-                nextPoints.entryPoint = currentVoxelPoints.exitPoint;
-                nextPoints.exitPoint = currentVoxelPoints.exitPoint;
 
-                if (currentVoxelPoints.exitPoint.x < currentVoxelPoints.exitPoint.y)
+                // Find the smallest tMax component → that's the axis we're stepping
+                if (tMax.x < tMax.y)
                 {
-                    if (currentVoxelPoints.exitPoint.x < currentVoxelPoints.exitPoint.z)
+                    if (tMax.x < tMax.z)
                     {
-                        nextVoxel.x += int(stepDirection.x);
-                        nextPoints.exitPoint.x += stepSize.x;
+                        // Step in X
+                        currentVoxel.x += int(stepDirection.x);
+                        nextPoints.exitPoint = ray.origin + tMax.x * ray.dir;
+                        tMax.x += stepSize.x;
                         lastStepAxis = 0;
                     }
                     else
                     {
-                        nextVoxel.z += int(stepDirection.z);
-                        nextPoints.exitPoint.z += stepSize.z;
+                        // Step in Z
+                        currentVoxel.z += int(stepDirection.z);
+                        nextPoints.exitPoint = ray.origin + tMax.z * ray.dir;
+                        tMax.z += stepSize.z;
                         lastStepAxis = 2;
                     }
                 }
                 else
                 {
-                    if (currentVoxelPoints.exitPoint.y < currentVoxelPoints.exitPoint.z)
+                    if (tMax.y < tMax.z)
                     {
-                        nextVoxel.y += int(stepDirection.y);
-                        nextPoints.exitPoint.y += stepSize.y;
+                        // Step in Y
+                        currentVoxel.y += int(stepDirection.y);
+                        nextPoints.exitPoint = ray.origin + tMax.y * ray.dir;
+                        tMax.y += stepSize.y;
                         lastStepAxis = 1;
                     }
                     else
                     {
-                        nextVoxel.z += int(stepDirection.z);
-                        nextPoints.exitPoint.z += stepSize.z;
+                        // Step in Z
+                        currentVoxel.z += int(stepDirection.z);
+                        nextPoints.exitPoint = ray.origin + tMax.z * ray.dir;
+                        tMax.z += stepSize.z;
                         lastStepAxis = 2;
                     }
                 }
+
+                // New entry point is old exit point
+                nextPoints.entryPoint = currentPoints.exitPoint;
+
                 return nextPoints;
+            }
+
+
+            int GetEntryAxis(int3 voxel, AABBPoints aabbPoints, float3 rayDir)
+            {
+                float epsilon = 0.0001;
+
+                float3 backstep = aabbPoints.entryPoint - rayDir * epsilon;
+                int3 prevVoxel = int3(floor((backstep - _BoundsMin) / _VoxelSize));
+                prevVoxel = clamp(prevVoxel, 0, int(_Resolution) - 1);
+
+                int3 delta = voxel - prevVoxel;
+
+                if (abs(delta.x) != 0) return 0;
+                if (abs(delta.y) != 0) return 1;
+                if (abs(delta.z) != 0) return 2;
+
+                // If still nothing changed, default to something (probably error)
+                return 0;
             }
 
 
@@ -182,42 +211,19 @@ Shader "Custom/VoxelRenderer_Optimized"
                     return false;
                 }
 
-
-                aabbPoints.entryPoint += ray.dir * 0.0004;
-
-
                 // Step direction along each axis
                 float3 stepDirection = sign(ray.dir);
                 float3 stepSize = abs(_VoxelSize / ray.dir);
 
-                // Starting voxel index from entry point
                 int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
 
-                // -- - FIX START -- -
-                // Determine the next voxel boundary based on the ray's direction.
-                // If ray.dir.x > 0, the next boundary is at voxel.x + 1. If < 0, it's at voxel.x.
-                float3 bias = float3(ray.dir.x > 0 ? 1.0 : 0.0, ray.dir.y > 0 ? 1.0 : 0.0, ray.dir.z > 0 ? 1.0 : 0.0);
-                float3 voxelBoundary = _BoundsMin + (float3(voxel) + bias) * _VoxelSize;
 
-                // Correctly calculate the distance (t) to the next boundary from the ray's origin.
-                float3 tMaxNext = (voxelBoundary - ray.origin) / ray.dir;
-                aabbPoints.exitPoint = tMaxNext; // We store the t - values in exitPoint for the DDA loop.
-                // -- - FIX END -- -
+                float3 voxelBoundary = _BoundsMin + (float3(voxel) + stepDirection * 0.5 + 0.5) * _VoxelSize;
+                float3 tMax = (voxelBoundary - ray.origin) / ray.dir;
+
 
                 // Determine initial lastStepAxis based on which axis the ray hits first
-                int lastStepAxis;
-                if (tMaxNext.x < tMaxNext.y && tMaxNext.x < tMaxNext.z)
-                {
-                    lastStepAxis = 0; // X
-                }
-                else if (tMaxNext.y < tMaxNext.z)
-                {
-                    lastStepAxis = 1; // Y
-                }
-                else
-                {
-                    lastStepAxis = 2; // Z
-                }
+                int lastStepAxis = GetEntryAxis(voxel, aabbPoints, ray.dir);
 
                 // Ray march loop
                 for (uint i = 0; i < _Resolution * 3; ++ i)
@@ -238,8 +244,9 @@ Shader "Custom/VoxelRenderer_Optimized"
                     }
 
                     // Step to next voxel
-                    aabbPoints = NextVoxelAABBPoints(aabbPoints, stepDirection, stepSize, voxel, voxel, lastStepAxis);
+                    aabbPoints = NextVoxelAABBPoints(aabbPoints, ray, tMax, stepSize, voxel, stepDirection, lastStepAxis);
                 }
+
 
                 hit = (VoxelHit)0; // Initialize hit to avoid compiler errors
                 return false;
@@ -259,7 +266,17 @@ Shader "Custom/VoxelRenderer_Optimized"
                 VoxelHit hit;
                 if (RayMarchVoxel(ray, hit))
                 {
-                    // return float4(hit.hitUV.rg, 0, 1);
+
+                    uint3 pos = hit.voxelCoordinate;
+
+                    //return float4((float3(pos.xyz) / _Resolution).xyz, 1);
+
+                    if(all(pos.xyz) == 0 || all(pos.xyz) >= _Resolution - 1)
+                    {
+                        return float4(0, 0, 0, 1);
+                    }
+
+                    //return float4(hit.hitUV.rg, 0, 1);
                     //Rendering Method
                     switch(hit.hitFace)
                     {
