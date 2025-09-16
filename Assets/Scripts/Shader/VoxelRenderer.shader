@@ -136,23 +136,23 @@ Shader "Custom/VoxelRenderer_Optimized"
             }
 
 
-            int GetEntryAxis(int3 voxel, AABBPoints aabbPoints, float3 rayDir)
+            int GetEntryAxis(Ray ray)
             {
-                float epsilon = 0.0001;
+                float3 invDir = 1.0 / ray.dir;
+                float3 tMin = (_BoundsMin - ray.origin) * invDir;
+                float3 tMaxGrid = (_BoundsMax - ray.origin) * invDir;
+                float3 t1 = min(tMin, tMaxGrid);
+                float tNear = max(max(t1.x, t1.y), t1.z);
 
-                float3 backstep = aabbPoints.entryPoint - rayDir * epsilon;
-                int3 prevVoxel = int3(floor((backstep - _BoundsMin) / _VoxelSize));
-                prevVoxel = clamp(prevVoxel, 0, int(_Resolution) - 1);
-
-                int3 delta = voxel - prevVoxel;
-
-                if (abs(delta.x) != 0) return 0;
-                if (abs(delta.y) != 0) return 1;
-                if (abs(delta.z) != 0) return 2;
-
-                // If still nothing changed, default to something (probably error)
-                return 0;
+                if (tNear == t1.x) {
+                    return 0;
+                } else if (tNear == t1.y) {
+                    return 1;
+                } else {
+                    return 2;
+                }
             }
+
 
 
 
@@ -223,7 +223,7 @@ Shader "Custom/VoxelRenderer_Optimized"
 
 
                 // Determine initial lastStepAxis based on which axis the ray hits first
-                int lastStepAxis = GetEntryAxis(voxel, aabbPoints, ray.dir);
+                int lastStepAxis = GetEntryAxis(ray);
 
                 // Ray march loop
                 for (uint i = 0; i < _Resolution * 3; ++ i)
@@ -271,10 +271,10 @@ Shader "Custom/VoxelRenderer_Optimized"
 
                     //return float4((float3(pos.xyz) / _Resolution).xyz, 1);
 
-                    if(all(pos.xyz) == 0 || all(pos.xyz) >= _Resolution - 1)
-                    {
-                        return float4(0, 0, 0, 1);
-                    }
+                    // if(all(pos.xyz) == 0 || all(pos.xyz) >= _Resolution - 1)
+                    // {
+                        // return float4(0, 0, 0, 1);
+                    // }
 
                     //return float4(hit.hitUV.rg, 0, 1);
                     //Rendering Method
