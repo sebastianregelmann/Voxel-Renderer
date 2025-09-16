@@ -20,6 +20,14 @@ Shader "Custom/VoxelRenderer_Optimized"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
+            #define POS_X 0
+            #define POS_Y 1
+            #define POS_Z 2
+            #define NEG_X 3
+            #define NEG_Y 4
+            #define NEG_Z 5
+
+
             Texture3D<int> _VoxelTexture;
             uint _Resolution;
             float _VoxelSize;
@@ -153,6 +161,42 @@ Shader "Custom/VoxelRenderer_Optimized"
                 }
             }
 
+            float2 GetHitUV(int3 voxelCoordinate, float3 entryPoint, int hitFace)
+            {
+                // Voxel min corner
+                float3 voxelMin = _BoundsMin + float3(voxelCoordinate) * _VoxelSize;
+
+                float3 localPos = (entryPoint - voxelMin) / _VoxelSize; // normalized to 0..1 within voxel
+
+                float2 uv;
+
+                switch(hitFace)
+                {
+                    case POS_X : // + X face → YZ plane
+                    uv = localPos.yz;
+                    break;
+                    case NEG_X : // - X face → YZ plane
+                    uv = float2(localPos.y, 1.0 - localPos.z); // flip V
+                    break;
+                    case POS_Y : // + Y face → XZ plane
+                    uv = float2(localPos.x, localPos.z);
+                    break;
+                    case NEG_Y : // - Y face → XZ plane
+                    uv = float2(1.0 - localPos.x, localPos.z); // flip U
+                    break;
+                    case POS_Z : // + Z face → XY plane
+                    uv = localPos.xy;
+                    break;
+                    case NEG_Z : // - Z face → XY plane
+                    uv = float2(1.0 - localPos.x, localPos.y); // flip U
+                    break;
+                    default :
+                    uv = float2(0, 0);
+                    break;
+                }
+
+                return clamp(uv, 0.0, 1.0);
+            }
 
 
 
@@ -169,30 +213,13 @@ Shader "Custom/VoxelRenderer_Optimized"
                 hit.depth = 1.0;
 
                 // Determine the hit face based on the last axis stepped
-                // 0 = - X, 1 = + X, 2 = - Y, 3 = + Y, 4 = - Z, 5 = + Z
-                hit.hitFace = lastStepAxis * 2 + (stepDirection[lastStepAxis] > 0 ? 1 : 0);
+                int direction = stepDirection[lastStepAxis];
+                hit.hitFace = lastStepAxis + (direction < 0 ? 3 : 0);
+
+
 
                 // UV calculation for the face
-                float2 uv;
-                float3 p = aabbPoints.entryPoint;
-
-                switch(hit.hitFace)
-                {
-                    case 0 : case 1 : // X faces → YZ plane
-                    uv = (p.yz - voxelMin.yz) / _VoxelSize;
-                    break;
-                    case 2 : case 3 : // Y faces → XZ plane
-                    uv = (p.xz - voxelMin.xz) / _VoxelSize;
-                    break;
-                    case 4 : case 5 : // Z faces → XY plane
-                    uv = (p.xy - voxelMin.xy) / _VoxelSize;
-                    break;
-                    default :
-                    uv = float2(0.0, 0.0);
-                    break;
-                }
-
-                hit.hitUV = uv;
+                hit.hitUV = GetHitUV(voxelCoordinate, aabbPoints.entryPoint, hit.hitFace);
                 return hit;
             }
 
@@ -218,12 +245,28 @@ Shader "Custom/VoxelRenderer_Optimized"
                 int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
 
 
-                float3 voxelBoundary = _BoundsMin + (float3(voxel) + stepDirection * 0.5 + 0.5) * _VoxelSize;
-                float3 tMax = (voxelBoundary - ray.origin) / ray.dir;
+                // Voxel bounds
+                float3 voxelMin = _BoundsMin + float3(voxel) * _VoxelSize;
+                float3 voxelMax = voxelMin + _VoxelSize;
 
+                // -- - FIX : Correct exit point of the first voxel -- -
+                float3 invDir = 1.0 / ray.dir;
+                float3 t1 = (voxelMin - ray.origin) * invDir;
+                float3 t2 = (voxelMax - ray.origin) * invDir;
+                float tNear = max(max(min(t1.x, t2.x), min(t1.y, t2.y)), min(t1.z, t2.z));
+                float tFar = min(min(max(t1.x, t2.x), max(t1.y, t2.y)), max(t1.z, t2.z));
+                aabbPoints.exitPoint = ray.origin + tFar * ray.dir;
 
-                // Determine initial lastStepAxis based on which axis the ray hits first
+                // Compute tMax for DDA
+                float3 tMax;
+                for(int i = 0; i < 3; i ++)
+                tMax[i] = stepDirection[i] > 0 ? (voxelMax[i] - ray.origin[i]) / ray.dir[i] : (voxelMin[i] - ray.origin[i]) / ray.dir[i];
+
                 int lastStepAxis = GetEntryAxis(ray);
+
+                // float3 voxelMin = _BoundsMin + float3(voxel) * _VoxelSize;
+                // float3 voxelMax = voxelMin + _VoxelSize;
+                // AABBGrid(voxelMin, voxelMax, ray, aabbPoints);
 
                 // Ray march loop
                 for (uint i = 0; i < _Resolution * 3; ++ i)
@@ -269,7 +312,7 @@ Shader "Custom/VoxelRenderer_Optimized"
 
                     uint3 pos = hit.voxelCoordinate;
 
-                    //return float4((float3(pos.xyz) / _Resolution).xyz, 1);
+                   // return float4((float3(pos.xyz) / _Resolution).xyz, 1);
 
                     // if(all(pos.xyz) == 0 || all(pos.xyz) >= _Resolution - 1)
                     // {
@@ -280,20 +323,20 @@ Shader "Custom/VoxelRenderer_Optimized"
                     //Rendering Method
                     switch(hit.hitFace)
                     {
-                        case 0 :
-                        return float4(1, 0.5, 0, 1);
-                        case 1 :
+                        case POS_X :
                         return float4(1, 0, 0, 1);
-                        case 2 :
-                        return float4(0, 1, 0.5, 1);
-                        case 3 :
+                        case POS_Y :
                         return float4(0, 1, 0, 1);
-                        case 4 :
-                        return float4(0.5, 0, 1, 1);
-                        case 5 :
+                        case POS_Z :
                         return float4(0, 0, 1, 1);
+                        case NEG_X :
+                        return float4(1, 1, 0, 1);
+                        case NEG_Y :
+                        return float4(0, 1, 1, 1);
+                        case NEG_Z :
+                        return float4(1, 0, 1, 1);
                         default :
-                        return float4(0.3, .3, .3, 1);
+                        return float4(0, 0, 0, 1);
                     }
 
 
