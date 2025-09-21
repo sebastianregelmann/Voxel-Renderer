@@ -436,11 +436,14 @@ Shader "Custom/VoxelRenderer_Optimized"
                         if (_VoxelTexture[voxelsToCheck[i]].r > 0)
                         {
                             float effect = 0;
-                            if (distanceToEdge[i] <= 0.25)
+                            // The effective occlusion distance is one quarter of the voxel's size
+                            float occlusionDistance = _VoxelSize * 0.4;
+
+                            // Check if the point is within the occlusion distance from the edge
+                            if (distanceToEdge[i] * _VoxelSize <= occlusionDistance)
                             {
-                                // Invert and scale the distance so effect is strongest at the edge (distance 0)
-                                // and fades to 0 as it approaches the 0.25 threshold.
-                                effect = 1.0 - (distanceToEdge[i] / 0.25);
+                                // Invert the normalized distance to create a fade from the edge
+                                effect = 1.0 - (distanceToEdge[i] * _VoxelSize) / occlusionDistance;
                             }
 
                             occlusion += effect * 0.5;
@@ -487,11 +490,14 @@ Shader "Custom/VoxelRenderer_Optimized"
                     //return float4(textureColor.rgb, 1.0);
 
                     //Render Ambiend Occlusion
-                    float occlusion = GetAmbientOcclusion(hit);
-                    return float4(occlusion, occlusion, occlusion, 0);
+                    //float occlusion = GetAmbientOcclusion(hit);
+                    //return float4(occlusion, occlusion, occlusion, 0);
 
-                    return float4(hit.hitUV.rg, 0, 1) - float4(occlusion, occlusion, occlusion, 0);
-                    return float4(occlusion, occlusion, occlusion, 1);
+
+                    float occlusion = GetAmbientOcclusion(hit);
+                    float3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                    return float4(textureColor.rgb, 1.0) - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .7);
+                    return float4(hit.hitUV.rg, 0, 1) - float4(occlusion, occlusion, occlusion, 0) * 0.25;
 
 
                     //Rendering Method
