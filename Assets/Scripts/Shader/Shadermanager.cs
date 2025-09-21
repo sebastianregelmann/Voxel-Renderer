@@ -18,6 +18,8 @@ public class Shadermanager : MonoBehaviour
     [Min(2)]
     public int chunkLimit = 100;
 
+    public Texture2D faceTexture;
+
 
     //Compute Buffers
     private ComputeBuffer vertexPositionsBuffer;
@@ -291,6 +293,7 @@ public class Shadermanager : MonoBehaviour
         renderMaterial.SetFloat("_VoxelSize", voxelSize);
         renderMaterial.SetVector("_BoundsMin", boundsMin);
         renderMaterial.SetVector("_BoundsMax", boundsMax);
+        renderMaterial.SetTexture("_FaceTexture", faceTexture);
     }
 
 

@@ -38,6 +38,10 @@ Shader "Custom/VoxelRenderer_Optimized"
             float3 _BoundsMin;
             float3 _BoundsMax;
 
+
+            TEXTURE2D(_FaceTexture); // Declare the texture
+            SAMPLER(sampler_FaceTexture); // Declare the sampler
+
             struct Ray {
                 float3 origin;
                 float3 dir;
@@ -62,10 +66,9 @@ Shader "Custom/VoxelRenderer_Optimized"
 
             struct VoxelHit{
                 bool hit;
-                uint3 voxelCoordinate;
+                uint3 voxel;
                 float3 hitPoint;
                 float2 hitUV;
-                float depth;
                 int hitFace;
             };
 
@@ -204,32 +207,26 @@ Shader "Custom/VoxelRenderer_Optimized"
                 switch (hitFace)
                 {
                     case POS_X : // Looking along + X → YZ plane
-                    // Flip V to get (0, 0) bottom - left from view
                     uv = float2(localPos.y, 1.0 - localPos.z);
                     break;
 
                     case NEG_X : // Looking along - X → YZ plane
-                    // Flip both U and V
                     uv = float2(localPos.y, localPos.z);
                     break;
 
                     case POS_Y : // Looking along + Y → XZ plane
-                    // Flip V
                     uv = float2(localPos.x, localPos.z);
                     break;
 
                     case NEG_Y : // Looking along - Y → XZ plane
-                    // Flip both U and V
-                    uv = float2(localPos.x,localPos.z);
+                    uv = float2(localPos.x, localPos.z);
                     break;
 
                     case POS_Z : // Looking along + Z → XY plane
-                    // Already correct
                     uv = float2(localPos.x, localPos.y);
                     break;
 
                     case NEG_Z : // Looking along - Z → XY plane
-                    // Flip V only
                     uv = float2(1.0 - localPos.x, localPos.y);
                     break;
 
@@ -243,16 +240,14 @@ Shader "Custom/VoxelRenderer_Optimized"
 
 
 
-
             //Converts the DDA info into a Hit info
             VoxelHit GetHitInfo(DDAInfo ddaInfo)
             {
                 VoxelHit hit;
 
                 hit.hit = true;
-                hit.voxelCoordinate = uint3(ddaInfo.voxel.xyz);
+                hit.voxel = uint3(ddaInfo.voxel.xyz);
                 hit.hitPoint = ddaInfo.entryPoint;
-                hit.depth = 0;
                 hit.hitFace = ddaInfo.lastStepAxis + (ddaInfo.stepDirection[ddaInfo.lastStepAxis] >= 0 ? 0 : 3);
 
                 hit.hitUV = GetHitUV(ddaInfo.voxel, ddaInfo.entryPoint, hit.hitFace);
@@ -263,23 +258,14 @@ Shader "Custom/VoxelRenderer_Optimized"
 
 
 
-            bool RayMarchVoxel(Ray ray, out VoxelHit hit)
+            bool RayMarchVoxel(Ray ray, AABBPoints boundsAABBPoints, out VoxelHit hit)
             {
-                AABBPoints aabbPoints;
-
-                // Early out if the ray doesn't intersect the voxel grid
-                if (! AABBGrid(_BoundsMin, _BoundsMax, ray, aabbPoints))
-                {
-                    hit = (VoxelHit)0;
-                    return false;
-                }
-
                 // Step direction and step size along each axis
                 float3 stepDirection = sign(ray.dir);
                 float3 stepSize = abs(_VoxelSize / ray.dir);
 
                 //Voxel index of the entry voxel
-                int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
+                int3 voxel = int3(clamp(floor((boundsAABBPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
 
                 // Voxel bounds
                 float3 voxelMin = _BoundsMin + float3(voxel) * _VoxelSize;
@@ -291,7 +277,7 @@ Shader "Custom/VoxelRenderer_Optimized"
                 float3 t2 = (voxelMax - ray.origin) * invDir;
                 float tNear = max(max(min(t1.x, t2.x), min(t1.y, t2.y)), min(t1.z, t2.z));
                 float tFar = min(min(max(t1.x, t2.x), max(t1.y, t2.y)), max(t1.z, t2.z));
-                aabbPoints.exitPoint = ray.origin + tFar * ray.dir;
+                boundsAABBPoints.exitPoint = ray.origin + tFar * ray.dir;
 
                 // Compute tMax for DDA
                 float3 tMax;
@@ -303,12 +289,9 @@ Shader "Custom/VoxelRenderer_Optimized"
 
 
 
-
-
-
                 DDAInfo ddaInfo;
-                ddaInfo.entryPoint = aabbPoints.entryPoint;
-                ddaInfo.exitPoint = aabbPoints.exitPoint;
+                ddaInfo.entryPoint = boundsAABBPoints.entryPoint;
+                ddaInfo.exitPoint = boundsAABBPoints.exitPoint;
                 ddaInfo.stepDirection = stepDirection;
                 ddaInfo.stepSize = stepSize;
                 ddaInfo.t_Max = tMax;
@@ -327,6 +310,145 @@ Shader "Custom/VoxelRenderer_Optimized"
             }
 
 
+            //Calculates the depth of a hit inside the bounding box of the voxel grid
+            float GetHitDepth(VoxelHit hit, AABBPoints boundsAABBPoints)
+            {
+                float totalDistance = distance(boundsAABBPoints.entryPoint, boundsAABBPoints.exitPoint);
+                float hitDistance = distance(boundsAABBPoints.entryPoint, hit.hitPoint);
+
+                //Normalize to 0 - 1
+                return 1.0 - saturate(hitDistance / totalDistance);
+            }
+
+            //Calculates how much of effect the ambient occlusion has
+            float GetAmbientOcclusion(VoxelHit hit)
+            {
+                int3 voxel = hit.voxel;
+                int3 voxelsToCheck[4];
+
+                switch(hit.hitFace)
+                {
+                    case POS_X :
+
+                    voxelsToCheck[0] = int3(voxel.x - 1, voxel.y + 1, voxel.z);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y - 1, voxel.z);
+                    voxelsToCheck[2] = int3(voxel.x - 1, voxel.y, voxel.z + 1);
+                    voxelsToCheck[3] = int3(voxel.x - 1, voxel.y, voxel.z - 1);
+                    break;
+
+                    case NEG_X :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y + 1, voxel.z);
+                    voxelsToCheck[1] = int3(voxel.x + 1, voxel.y - 1, voxel.z);
+                    voxelsToCheck[2] = int3(voxel.x + 1, voxel.y, voxel.z + 1);
+                    voxelsToCheck[3] = int3(voxel.x + 1, voxel.y, voxel.z - 1);
+                    break;
+
+                    case POS_Y :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y - 1, voxel.z);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y - 1, voxel.z);
+                    voxelsToCheck[2] = int3(voxel.x, voxel.y - 1, voxel.z + 1);
+                    voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z - 1);
+                    break;
+
+                    case NEG_Y :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y + 1, voxel.z);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y + 1, voxel.z);
+                    voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z + 1);
+                    voxelsToCheck[3] = int3(voxel.x, voxel.y + 1, voxel.z - 1);
+                    break;
+
+
+                    case POS_Z :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y, voxel.z - 1);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y, voxel.z - 1);
+                    voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z - 1);
+                    voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z - 1);
+                    break;
+
+                    case NEG_Z :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y, voxel.z + 1);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y, voxel.z + 1);
+                    voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z + 1);
+                    voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z + 1);
+                    break;
+                }
+
+                float distanceToEdge[4];
+
+                // Convert the world - space hit point to local normalized voxel coordinates
+                float3 voxelMin = _BoundsMin + float3(voxel) * _VoxelSize;
+                float3 localPos = (hit.hitPoint - voxelMin) / _VoxelSize;
+
+                // Calculate the normalized distance to the edge for each neighbor
+                switch(hit.hitFace)
+                {
+                    case POS_X : // YZ plane
+                    distanceToEdge[0] = 1.0 - localPos.y; // Distance to top edge
+                    distanceToEdge[1] = localPos.y; // Distance to bottom edge
+                    distanceToEdge[2] = 1.0 - localPos.z; // Distance to front edge
+                    distanceToEdge[3] = localPos.z; // Distance to back edge
+                    break;
+
+                    case NEG_X : // YZ plane
+                    distanceToEdge[0] = 1.0 - localPos.y; // Distance to top edge
+                    distanceToEdge[1] = localPos.y; // Distance to bottom edge
+                    distanceToEdge[2] = 1.0 - localPos.z; // Distance to front edge
+                    distanceToEdge[3] = localPos.z; // Distance to back edge
+                    break;
+
+                    case POS_Y : // XZ plane
+                    distanceToEdge[0] = 1.0 - localPos.x; // Distance to right edge
+                    distanceToEdge[1] = localPos.x; // Distance to left edge
+                    distanceToEdge[2] = 1.0 - localPos.z; // Distance to front edge
+                    distanceToEdge[3] = localPos.z; // Distance to back edge
+                    break;
+
+                    case NEG_Y : // XZ plane
+                    distanceToEdge[0] = 1.0 - localPos.x; // Distance to right edge
+                    distanceToEdge[1] = localPos.x; // Distance to left edge
+                    distanceToEdge[2] = 1.0 - localPos.z; // Distance to front edge
+                    distanceToEdge[3] = localPos.z; // Distance to back edge
+                    break;
+
+                    case POS_Z : // XY plane
+                    distanceToEdge[0] = 1.0 - localPos.x; // Distance to right edge
+                    distanceToEdge[1] = localPos.x; // Distance to left edge
+                    distanceToEdge[2] = 1.0 - localPos.y; // Distance to top edge
+                    distanceToEdge[3] = localPos.y; // Distance to bottom edge
+                    break;
+
+                    case NEG_Z : // XY plane
+                    distanceToEdge[0] = 1.0 - localPos.x; // Distance to right edge
+                    distanceToEdge[1] = localPos.x; // Distance to left edge
+                    distanceToEdge[2] = 1.0 - localPos.y; // Distance to top edge
+                    distanceToEdge[3] = localPos.y; // Distance to bottom edge
+                    break;
+                }
+
+
+                float occlusion = 0;
+
+                for(int i = 0; i < 4; i ++)
+                {
+                    if (all(voxelsToCheck[i] >= 0) && all(voxelsToCheck[i] < int(_Resolution)))
+                    {
+                        // Check if the neighbor voxel exists
+                        if (_VoxelTexture[voxelsToCheck[i]].r > 0)
+                        {
+                            float effect = 0;
+                            if (distanceToEdge[i] <= 0.25)
+                            {
+                                // Invert and scale the distance so effect is strongest at the edge (distance 0)
+                                // and fades to 0 as it approaches the 0.25 threshold.
+                                effect = 1.0 - (distanceToEdge[i] / 0.25);
+                            }
+
+                            occlusion += effect * 0.5;
+                        }
+                    }
+                }
+                return 1 - occlusion;
+            }
 
             half4 frag(Varyings IN) : SV_Target
             {
@@ -337,20 +459,41 @@ Shader "Custom/VoxelRenderer_Optimized"
                 ray.origin = _WorldSpaceCameraPos;
                 ray.dir = normalize(worldPos - _WorldSpaceCameraPos);
 
-                VoxelHit hit;
-                if (RayMarchVoxel(ray, hit))
+
+
+                AABBPoints boundsAABBPoints;
+                if(! AABBGrid(_BoundsMin, _BoundsMax, ray, boundsAABBPoints))
                 {
+                    //Ray misses Bounding Boxes
+                    return SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, IN.texcoord);
+                }
 
-                    // uint3 pos = hit.voxelCoordinate;
+                //Raymarch through voxel grid
+                VoxelHit hit;
+                if (RayMarchVoxel(ray, boundsAABBPoints, hit))
+                {
+                    //Renders the voxel position
+                    //return float4((float3(hit.voxel.xyz) / _Resolution).xyz, 1);
 
-                    // return float4((float3(pos.xyz) / _Resolution).xyz, 1);
+                    //Renders the Scene Depth
+                    //float depth = GetHitDepth(hit, boundsAABBPoints);
+                    //return float4(depth, depth, depth, 1);
 
-                    // if(all(pos.xyz) == 0 || all(pos.xyz) >= _Resolution - 1)
-                    // {
-                        // return float4(0, 0, 0, 1);
-                    // }
+                    //Renders the Hit face UV coordiantes
+                    //return float4(hit.hitUV.rg, 0, 1);
 
-                    return float4(hit.hitUV.rg, 0, 1);
+                    //Render from Texture
+                    //float3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                    //return float4(textureColor.rgb, 1.0);
+
+                    //Render Ambiend Occlusion
+                    float occlusion = GetAmbientOcclusion(hit);
+                    return float4(occlusion, occlusion, occlusion, 0);
+
+                    return float4(hit.hitUV.rg, 0, 1) - float4(occlusion, occlusion, occlusion, 0);
+                    return float4(occlusion, occlusion, occlusion, 1);
+
+
                     //Rendering Method
                     switch(hit.hitFace)
                     {
