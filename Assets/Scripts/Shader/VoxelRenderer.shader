@@ -20,6 +20,10 @@ Shader "Custom/VoxelRenderer_Optimized"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
+            #define AXIS_X 0
+            #define AXIS_Y 1
+            #define AXIS_Z 2
+
             #define POS_X 0
             #define POS_Y 1
             #define POS_Z 2
@@ -44,6 +48,17 @@ Shader "Custom/VoxelRenderer_Optimized"
                 float3 entryPoint;
                 float3 exitPoint;
             };
+
+            struct DDAInfo {
+                float3 entryPoint; //Entry point to voxel in worldspace
+                float3 exitPoint; //exit point of voxel in worldspace
+                float3 stepDirection; //DDA Step direction
+                float3 stepSize; //Step size to travel one voxel in that direction
+                float3 t_Max;
+                int lastStepAxis; //0 -> X, 1 -> y, 2 -> z axis
+                int3 voxel;
+            };
+
 
             struct VoxelHit{
                 bool hit;
@@ -92,58 +107,6 @@ Shader "Custom/VoxelRenderer_Optimized"
                 return true;
             }
 
-
-            AABBPoints NextVoxelAABBPoints(AABBPoints currentPoints, Ray ray, inout float3 tMax, float3 stepSize, inout int3 currentVoxel, float3 stepDirection, out int lastStepAxis)
-            {
-                AABBPoints nextPoints;
-
-                // Find the smallest tMax component → that's the axis we're stepping
-                if (tMax.x < tMax.y)
-                {
-                    if (tMax.x < tMax.z)
-                    {
-                        // Step in X
-                        currentVoxel.x += int(stepDirection.x);
-                        nextPoints.exitPoint = ray.origin + tMax.x * ray.dir;
-                        tMax.x += stepSize.x;
-                        lastStepAxis = 0;
-                    }
-                    else
-                    {
-                        // Step in Z
-                        currentVoxel.z += int(stepDirection.z);
-                        nextPoints.exitPoint = ray.origin + tMax.z * ray.dir;
-                        tMax.z += stepSize.z;
-                        lastStepAxis = 2;
-                    }
-                }
-                else
-                {
-                    if (tMax.y < tMax.z)
-                    {
-                        // Step in Y
-                        currentVoxel.y += int(stepDirection.y);
-                        nextPoints.exitPoint = ray.origin + tMax.y * ray.dir;
-                        tMax.y += stepSize.y;
-                        lastStepAxis = 1;
-                    }
-                    else
-                    {
-                        // Step in Z
-                        currentVoxel.z += int(stepDirection.z);
-                        nextPoints.exitPoint = ray.origin + tMax.z * ray.dir;
-                        tMax.z += stepSize.z;
-                        lastStepAxis = 2;
-                    }
-                }
-
-                // New entry point is old exit point
-                nextPoints.entryPoint = currentPoints.exitPoint;
-
-                return nextPoints;
-            }
-
-
             int GetEntryAxis(Ray ray)
             {
                 float3 invDir = 1.0 / ray.dir;
@@ -161,37 +124,117 @@ Shader "Custom/VoxelRenderer_Optimized"
                 }
             }
 
+
+
+            //DDA the grid
+            bool DDA(inout DDAInfo ddaInfo, Ray ray)
+            {
+                //DDA the Voxel Grid
+                for (uint i = 0; i < _Resolution * 3; ++ i)
+                {
+                    // Check if voxel is inside grid
+                    if (all(ddaInfo.voxel >= 0) && all(ddaInfo.voxel < int(_Resolution)))
+                    {
+                        if (_VoxelTexture[ddaInfo.voxel].r > 0)
+                        {
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        // Ray has exited the grid bounds
+                        return false;
+                    }
+
+                    // Step to next voxel
+                    // Step to next voxel
+                    if (ddaInfo.t_Max.x < ddaInfo.t_Max.y)
+                    {
+                        if (ddaInfo.t_Max.x < ddaInfo.t_Max.z)
+                        {
+                            ddaInfo.voxel.x += int(ddaInfo.stepDirection.x);
+                            ddaInfo.lastStepAxis = AXIS_X;
+                            ddaInfo.entryPoint = ray.origin + ddaInfo.t_Max.x * ray.dir;
+                            ddaInfo.t_Max.x += ddaInfo.stepSize.x;
+                        }
+                        else
+                        {
+                            ddaInfo.voxel.z += int(ddaInfo.stepDirection.z);
+                            ddaInfo.lastStepAxis = AXIS_Z;
+                            ddaInfo.entryPoint = ray.origin + ddaInfo.t_Max.z * ray.dir;
+                            ddaInfo.t_Max.z += ddaInfo.stepSize.z;
+                        }
+                    }
+                    else
+                    {
+                        if (ddaInfo.t_Max.y < ddaInfo.t_Max.z)
+                        {
+                            ddaInfo.voxel.y += int(ddaInfo.stepDirection.y);
+                            ddaInfo.lastStepAxis = AXIS_Y;
+                            ddaInfo.entryPoint = ray.origin + ddaInfo.t_Max.y * ray.dir;
+                            ddaInfo.t_Max.y += ddaInfo.stepSize.y;
+                        }
+                        else
+                        {
+                            ddaInfo.voxel.z += int(ddaInfo.stepDirection.z);
+                            ddaInfo.lastStepAxis = AXIS_Z;
+                            ddaInfo.entryPoint = ray.origin + ddaInfo.t_Max.z * ray.dir;
+                            ddaInfo.t_Max.z += ddaInfo.stepSize.z;
+                        }
+                    }
+
+                    // Compute exit point of current voxel
+                    ddaInfo.exitPoint = ddaInfo.entryPoint + ddaInfo.stepDirection * _VoxelSize;
+                }
+
+                return false;
+            }
+
+
             float2 GetHitUV(int3 voxelCoordinate, float3 entryPoint, int hitFace)
             {
-                // Voxel min corner
+                // Voxel min corner in world space
                 float3 voxelMin = _BoundsMin + float3(voxelCoordinate) * _VoxelSize;
 
-                float3 localPos = (entryPoint - voxelMin) / _VoxelSize; // normalized to 0..1 within voxel
+                // Normalize hit point to voxel - local space [0, 1]
+                float3 localPos = (entryPoint - voxelMin) / _VoxelSize;
 
                 float2 uv;
 
-                switch(hitFace)
+                switch (hitFace)
                 {
-                    case POS_X : // + X face → YZ plane
-                    uv = localPos.yz;
+                    case POS_X : // Looking along + X → YZ plane
+                    // Flip V to get (0, 0) bottom - left from view
+                    uv = float2(localPos.y, 1.0 - localPos.z);
                     break;
-                    case NEG_X : // - X face → YZ plane
-                    uv = float2(localPos.y, 1.0 - localPos.z); // flip V
+
+                    case NEG_X : // Looking along - X → YZ plane
+                    // Flip both U and V
+                    uv = float2(localPos.y, localPos.z);
                     break;
-                    case POS_Y : // + Y face → XZ plane
+
+                    case POS_Y : // Looking along + Y → XZ plane
+                    // Flip V
                     uv = float2(localPos.x, localPos.z);
                     break;
-                    case NEG_Y : // - Y face → XZ plane
-                    uv = float2(1.0 - localPos.x, localPos.z); // flip U
+
+                    case NEG_Y : // Looking along - Y → XZ plane
+                    // Flip both U and V
+                    uv = float2(localPos.x,localPos.z);
                     break;
-                    case POS_Z : // + Z face → XY plane
-                    uv = localPos.xy;
+
+                    case POS_Z : // Looking along + Z → XY plane
+                    // Already correct
+                    uv = float2(localPos.x, localPos.y);
                     break;
-                    case NEG_Z : // - Z face → XY plane
-                    uv = float2(1.0 - localPos.x, localPos.y); // flip U
+
+                    case NEG_Z : // Looking along - Z → XY plane
+                    // Flip V only
+                    uv = float2(1.0 - localPos.x, localPos.y);
                     break;
+
                     default :
-                    uv = float2(0, 0);
+                    uv = float2(0.0, 0.0);
                     break;
                 }
 
@@ -200,29 +243,22 @@ Shader "Custom/VoxelRenderer_Optimized"
 
 
 
-            VoxelHit GetVoxelHit(int3 voxelCoordinate, AABBPoints aabbPoints, int lastStepAxis, float3 stepDirection)
+
+            //Converts the DDA info into a Hit info
+            VoxelHit GetHitInfo(DDAInfo ddaInfo)
             {
-                // Calculate the voxel's world bounds
-                float3 voxelMin = _BoundsMin + float3(voxelCoordinate) * _VoxelSize;
-                float3 voxelMax = voxelMin + _VoxelSize;
-
                 VoxelHit hit;
+
                 hit.hit = true;
-                hit.voxelCoordinate = uint3(voxelCoordinate);
-                hit.hitPoint = aabbPoints.entryPoint;
-                hit.depth = 1.0;
+                hit.voxelCoordinate = uint3(ddaInfo.voxel.xyz);
+                hit.hitPoint = ddaInfo.entryPoint;
+                hit.depth = 0;
+                hit.hitFace = ddaInfo.lastStepAxis + (ddaInfo.stepDirection[ddaInfo.lastStepAxis] >= 0 ? 0 : 3);
 
-                // Determine the hit face based on the last axis stepped
-                int direction = stepDirection[lastStepAxis];
-                hit.hitFace = lastStepAxis + (direction < 0 ? 3 : 0);
+                hit.hitUV = GetHitUV(ddaInfo.voxel, ddaInfo.entryPoint, hit.hitFace);
 
-
-
-                // UV calculation for the face
-                hit.hitUV = GetHitUV(voxelCoordinate, aabbPoints.entryPoint, hit.hitFace);
                 return hit;
             }
-
 
 
 
@@ -234,16 +270,16 @@ Shader "Custom/VoxelRenderer_Optimized"
                 // Early out if the ray doesn't intersect the voxel grid
                 if (! AABBGrid(_BoundsMin, _BoundsMax, ray, aabbPoints))
                 {
-                    hit = (VoxelHit)0; // Initialize hit to avoid compiler errors
+                    hit = (VoxelHit)0;
                     return false;
                 }
 
-                // Step direction along each axis
+                // Step direction and step size along each axis
                 float3 stepDirection = sign(ray.dir);
                 float3 stepSize = abs(_VoxelSize / ray.dir);
 
+                //Voxel index of the entry voxel
                 int3 voxel = int3(clamp(floor((aabbPoints.entryPoint - _BoundsMin) / _VoxelSize), 0, _Resolution - 1));
-
 
                 // Voxel bounds
                 float3 voxelMin = _BoundsMin + float3(voxel) * _VoxelSize;
@@ -262,36 +298,31 @@ Shader "Custom/VoxelRenderer_Optimized"
                 for(int i = 0; i < 3; i ++)
                 tMax[i] = stepDirection[i] > 0 ? (voxelMax[i] - ray.origin[i]) / ray.dir[i] : (voxelMin[i] - ray.origin[i]) / ray.dir[i];
 
+                //Compute the entry axis for the first voxel
                 int lastStepAxis = GetEntryAxis(ray);
 
-                // float3 voxelMin = _BoundsMin + float3(voxel) * _VoxelSize;
-                // float3 voxelMax = voxelMin + _VoxelSize;
-                // AABBGrid(voxelMin, voxelMax, ray, aabbPoints);
 
-                // Ray march loop
-                for (uint i = 0; i < _Resolution * 3; ++ i)
+
+
+
+
+                DDAInfo ddaInfo;
+                ddaInfo.entryPoint = aabbPoints.entryPoint;
+                ddaInfo.exitPoint = aabbPoints.exitPoint;
+                ddaInfo.stepDirection = stepDirection;
+                ddaInfo.stepSize = stepSize;
+                ddaInfo.t_Max = tMax;
+                ddaInfo.lastStepAxis = lastStepAxis;
+                ddaInfo.voxel = voxel;
+
+
+                //Make the DDA Ray traversal
+                if(DDA(ddaInfo, ray))
                 {
-                    // Check if voxel is inside grid
-                    if (all(voxel >= 0) && all(voxel < int(_Resolution)))
-                    {
-                        if (_VoxelTexture[voxel].r > 0)
-                        {
-                            hit = GetVoxelHit(voxel, aabbPoints, lastStepAxis, stepDirection);
-                            return true;
-                        }
-                    }
-                    else
-                    {
-                        // Ray has exited the grid bounds
-                        break;
-                    }
-
-                    // Step to next voxel
-                    aabbPoints = NextVoxelAABBPoints(aabbPoints, ray, tMax, stepSize, voxel, stepDirection, lastStepAxis);
+                    hit = GetHitInfo(ddaInfo);
+                    return true;
                 }
-
-
-                hit = (VoxelHit)0; // Initialize hit to avoid compiler errors
+                hit = (VoxelHit)0;
                 return false;
             }
 
@@ -310,16 +341,16 @@ Shader "Custom/VoxelRenderer_Optimized"
                 if (RayMarchVoxel(ray, hit))
                 {
 
-                    uint3 pos = hit.voxelCoordinate;
+                    // uint3 pos = hit.voxelCoordinate;
 
-                   // return float4((float3(pos.xyz) / _Resolution).xyz, 1);
+                    // return float4((float3(pos.xyz) / _Resolution).xyz, 1);
 
                     // if(all(pos.xyz) == 0 || all(pos.xyz) >= _Resolution - 1)
                     // {
                         // return float4(0, 0, 0, 1);
                     // }
 
-                    //return float4(hit.hitUV.rg, 0, 1);
+                    return float4(hit.hitUV.rg, 0, 1);
                     //Rendering Method
                     switch(hit.hitFace)
                     {
