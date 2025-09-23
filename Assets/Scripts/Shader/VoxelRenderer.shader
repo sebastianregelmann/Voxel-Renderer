@@ -51,6 +51,21 @@ Shader "Custom/VoxelRenderer_Optimized"
             TEXTURE2D(_FaceTexture); // Declare the texture
             SAMPLER(sampler_FaceTexture); // Declare the sampler
 
+
+            TEXTURE2D(_FaceTexture_0);
+            SAMPLER(sampler_FaceTexture_0);
+            TEXTURE2D(_FaceTexture_1);
+            SAMPLER(sampler_FaceTexture_1);
+            TEXTURE2D(_FaceTexture_2);
+            SAMPLER(sampler_FaceTexture_2);
+            TEXTURE2D(_FaceTexture_3);
+            SAMPLER(sampler_FaceTexture_3);
+            TEXTURE2D(_FaceTexture_4);
+            SAMPLER(sampler_FaceTexture_4);
+            TEXTURE2D(_FaceTexture_5);
+            SAMPLER(sampler_FaceTexture_5);
+
+
             struct Ray {
                 float3 origin;
                 float3 dir;
@@ -518,27 +533,27 @@ Shader "Custom/VoxelRenderer_Optimized"
                     switch(hit.hitFace)
                     {
                         case POS_X :
-                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture_0, sampler_FaceTexture_0, hit.hitUV).rgb;
                         color = float4(textureColor.rgb, 1.0);
                         break;
                         case POS_Y :
-                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture_1, sampler_FaceTexture_1, hit.hitUV).rgb;
                         color = float4(textureColor.rgb, 1.0);
                         break;
                         case POS_Z :
-                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture_2, sampler_FaceTexture_2, hit.hitUV).rgb;
                         color = float4(textureColor.rgb, 1.0);
                         break;
                         case NEG_X :
-                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture_3, sampler_FaceTexture_3, hit.hitUV).rgb;
                         color = float4(textureColor.rgb, 1.0);
                         break;
                         case NEG_Y :
-                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture_4, sampler_FaceTexture_4, hit.hitUV).rgb;
                         color = float4(textureColor.rgb, 1.0);
                         break;
                         case NEG_Z :
-                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture_5, sampler_FaceTexture_5, hit.hitUV).rgb;
                         color = float4(textureColor.rgb, 1.0);
                         break;
                         default :
@@ -555,7 +570,7 @@ Shader "Custom/VoxelRenderer_Optimized"
                 if(_AmbientOcclusion > 0 && _RenderMode != DEPTH)
                 {
                     float occlusion = GetAmbientOcclusion(hit);
-                    color = color - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .7);
+                    color = color - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .5);
                 }
 
                 return color;

@@ -19,6 +19,7 @@ public class Shadermanager : MonoBehaviour
     public int chunkLimit = 100;
 
     public Texture2D faceTexture;
+    public Texture2D[] faceTextures;
 
     public RENDER_MODE renderMode = RENDER_MODE.SOLID;
     public bool ambientOcclusion;
@@ -297,6 +298,11 @@ public class Shadermanager : MonoBehaviour
         renderMaterial.SetVector("_BoundsMin", boundsMin);
         renderMaterial.SetVector("_BoundsMax", boundsMax);
         renderMaterial.SetTexture("_FaceTexture", faceTexture);
+
+        for (int i = 0; i < faceTextures.Length; i++)
+        {
+            renderMaterial.SetTexture("_FaceTexture_" + i.ToString(), faceTextures[i]);
+        }
 
         renderMaterial.SetInt("_RenderMode", (int)renderMode);
         renderMaterial.SetInt("_AmbientOcclusion", ambientOcclusion ? 1 : 0);

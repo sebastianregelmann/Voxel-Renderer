@@ -2,73 +2,78 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
-    public Transform target;               // The origin of your coordinate system
-    public float distance = 10.0f;
-    public float zoomSpeed = 2.0f;
-    public float minDistance = 2f;
-    public float maxDistance = 50f;
+    public float normalSpeed = 5.0f;
+    public float fastSpeed = 15.0f;
+    public float mouseSensitivity = 2.0f;
+    public float climbSpeed = 5.0f;
 
-    public float rotationSpeed = 5.0f;
-    public float panSpeed = 0.5f;
+    private float rotationX = 0.0f;
+    private float rotationY = 0.0f;
 
-    public float minYAngle = 5f;
-    public float maxYAngle = 85f;
+    private bool cursorLocked = false;
 
-    public float maxPanDistance = 20f;     // 🔒 Max distance allowed for panning
-
-    private float currentX = 0f;
-    private float currentY = 45f;
-
-    private Vector3 targetOffset = Vector3.zero;
+    void Start()
+    {
+        Vector3 rot = transform.localRotation.eulerAngles;
+        rotationX = rot.y;
+        rotationY = rot.x;
+    }
 
     void Update()
     {
-        // Rotate around target
-        if (Input.GetMouseButton(1)) // Right mouse
-        {
-            currentX += Input.GetAxis("Mouse X") * rotationSpeed;
-            currentY -= Input.GetAxis("Mouse Y") * rotationSpeed;
-            currentY = Mathf.Clamp(currentY, minYAngle, maxYAngle);
-        }
-
-        // Zoom
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-        distance -= scroll * zoomSpeed;
-        distance = Mathf.Clamp(distance, minDistance, maxDistance);
-
-        // Pan (Middle Mouse Button)
-        if (Input.GetMouseButton(2))
-        {
-            float panX = -Input.GetAxis("Mouse X") * panSpeed;
-            float panY = -Input.GetAxis("Mouse Y") * panSpeed;
-
-            // Pan in camera's local space
-            Vector3 right = transform.right;
-            Vector3 up = transform.up;
-
-            Vector3 panMovement = right * panX + up * panY;
-            Vector3 newOffset = targetOffset + panMovement;
-
-            // Clamp the new offset to stay within max pan distance
-            if (newOffset.magnitude <= maxPanDistance)
-            {
-                targetOffset = newOffset;
-            }
-            else
-            {
-                targetOffset = newOffset.normalized * maxPanDistance;
-            }
-        }
+        HandleMouseLook();
+        HandleMovementInput();
     }
 
-    void LateUpdate()
+    void HandleMouseLook()
     {
-        Quaternion rotation = Quaternion.Euler(currentY, currentX, 0);
-        Vector3 direction = rotation * new Vector3(0, 0, -distance);
+        if (Input.GetMouseButtonDown(1))
+        {
+            LockCursor(true);
+        }
+        else if (Input.GetMouseButtonUp(1))
+        {
+            LockCursor(false);
+        }
 
-        Vector3 finalTargetPosition = target.position + targetOffset;
+        if (!cursorLocked) return;
 
-        transform.position = finalTargetPosition + direction;
-        transform.LookAt(finalTargetPosition);
+        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
+        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
+
+        rotationX += mouseX;
+        rotationY -= mouseY;
+        rotationY = Mathf.Clamp(rotationY, -89f, 89f);
+
+        transform.rotation = Quaternion.Euler(rotationY, rotationX, 0.0f);
+    }
+
+    void HandleMovementInput()
+    {
+        float speed = Input.GetKey(KeyCode.LeftShift) ? fastSpeed : normalSpeed;
+
+        Vector3 direction = new Vector3();
+
+        if (Input.GetKey(KeyCode.W))
+            direction += transform.forward;
+        if (Input.GetKey(KeyCode.S))
+            direction -= transform.forward;
+        if (Input.GetKey(KeyCode.A))
+            direction -= transform.right;
+        if (Input.GetKey(KeyCode.D))
+            direction += transform.right;
+        if (Input.GetKey(KeyCode.E))
+            direction += Vector3.up;
+        if (Input.GetKey(KeyCode.Q))
+            direction -= Vector3.up;
+
+        transform.position += direction.normalized * speed * Time.deltaTime;
+    }
+
+    void LockCursor(bool isLocked)
+    {
+        cursorLocked = isLocked;
+        Cursor.lockState = isLocked ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !isLocked;
     }
 }
