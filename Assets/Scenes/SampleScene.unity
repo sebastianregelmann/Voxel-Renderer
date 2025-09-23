@@ -154,8 +154,9 @@ MonoBehaviour:
   shader: {fileID: 7200000, guid: 75ec3187f1ba88a40b85b30076607471, type: 3}
   renderMaterial: {fileID: 2100000, guid: a1e4648ec72a68e46ba9fa6cc04a45bc, type: 2}
   mesh: {fileID: -4041163356895272288, guid: 55db7a3b071d2e34d87ea5ea9d0c6502, type: 3}
-  resolution: 100
+  resolution: 25
   chunkLimit: 1000
+  faceTexture: {fileID: 2800000, guid: 12406cff08aae2c4c8eff668d2fa2859, type: 3}
   drawVoxelGizmos: 0
 --- !u!4 &329268511
 Transform:

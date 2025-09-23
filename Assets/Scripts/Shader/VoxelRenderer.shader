@@ -207,11 +207,11 @@ Shader "Custom/VoxelRenderer_Optimized"
                 switch (hitFace)
                 {
                     case POS_X : // Looking along + X → YZ plane
-                    uv = float2(localPos.y, 1.0 - localPos.z);
+                    uv = float2(localPos.z, localPos.y);
                     break;
 
                     case NEG_X : // Looking along - X → YZ plane
-                    uv = float2(localPos.y, localPos.z);
+                    uv = float2(1 - localPos.z, localPos.y);
                     break;
 
                     case POS_Y : // Looking along + Y → XZ plane
@@ -219,15 +219,15 @@ Shader "Custom/VoxelRenderer_Optimized"
                     break;
 
                     case NEG_Y : // Looking along - Y → XZ plane
-                    uv = float2(localPos.x, localPos.z);
+                    uv = float2(1 - localPos.x, localPos.z);
                     break;
 
                     case POS_Z : // Looking along + Z → XY plane
-                    uv = float2(localPos.x, localPos.y);
+                    uv = float2(1 - localPos.x, localPos.y);
                     break;
 
                     case NEG_Z : // Looking along - Z → XY plane
-                    uv = float2(1.0 - localPos.x, localPos.y);
+                    uv = float2(localPos.x, localPos.y);
                     break;
 
                     default :
@@ -248,7 +248,7 @@ Shader "Custom/VoxelRenderer_Optimized"
                 hit.hit = true;
                 hit.voxel = uint3(ddaInfo.voxel.xyz);
                 hit.hitPoint = ddaInfo.entryPoint;
-                hit.hitFace = ddaInfo.lastStepAxis + (ddaInfo.stepDirection[ddaInfo.lastStepAxis] >= 0 ? 0 : 3);
+                hit.hitFace = ddaInfo.lastStepAxis + (ddaInfo.stepDirection[ddaInfo.lastStepAxis] >= 0 ? 3 : 0);
 
                 hit.hitUV = GetHitUV(ddaInfo.voxel, ddaInfo.entryPoint, hit.hitFace);
 
@@ -330,46 +330,46 @@ Shader "Custom/VoxelRenderer_Optimized"
                 {
                     case POS_X :
 
-                    voxelsToCheck[0] = int3(voxel.x - 1, voxel.y + 1, voxel.z);
-                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y - 1, voxel.z);
-                    voxelsToCheck[2] = int3(voxel.x - 1, voxel.y, voxel.z + 1);
-                    voxelsToCheck[3] = int3(voxel.x - 1, voxel.y, voxel.z - 1);
-                    break;
-
-                    case NEG_X :
                     voxelsToCheck[0] = int3(voxel.x + 1, voxel.y + 1, voxel.z);
                     voxelsToCheck[1] = int3(voxel.x + 1, voxel.y - 1, voxel.z);
                     voxelsToCheck[2] = int3(voxel.x + 1, voxel.y, voxel.z + 1);
                     voxelsToCheck[3] = int3(voxel.x + 1, voxel.y, voxel.z - 1);
                     break;
 
-                    case POS_Y :
-                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y - 1, voxel.z);
+                    case NEG_X :
+                    voxelsToCheck[0] = int3(voxel.x - 1, voxel.y + 1, voxel.z);
                     voxelsToCheck[1] = int3(voxel.x - 1, voxel.y - 1, voxel.z);
-                    voxelsToCheck[2] = int3(voxel.x, voxel.y - 1, voxel.z + 1);
-                    voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z - 1);
+                    voxelsToCheck[2] = int3(voxel.x - 1, voxel.y, voxel.z + 1);
+                    voxelsToCheck[3] = int3(voxel.x - 1, voxel.y, voxel.z - 1);
                     break;
 
-                    case NEG_Y :
+                    case POS_Y :
                     voxelsToCheck[0] = int3(voxel.x + 1, voxel.y + 1, voxel.z);
                     voxelsToCheck[1] = int3(voxel.x - 1, voxel.y + 1, voxel.z);
                     voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z + 1);
                     voxelsToCheck[3] = int3(voxel.x, voxel.y + 1, voxel.z - 1);
                     break;
 
-
-                    case POS_Z :
-                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y, voxel.z - 1);
-                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y, voxel.z - 1);
-                    voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z - 1);
+                    case NEG_Y :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y - 1, voxel.z);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y - 1, voxel.z);
+                    voxelsToCheck[2] = int3(voxel.x, voxel.y - 1, voxel.z + 1);
                     voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z - 1);
                     break;
 
-                    case NEG_Z :
+
+                    case POS_Z :
                     voxelsToCheck[0] = int3(voxel.x + 1, voxel.y, voxel.z + 1);
                     voxelsToCheck[1] = int3(voxel.x - 1, voxel.y, voxel.z + 1);
                     voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z + 1);
                     voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z + 1);
+                    break;
+
+                    case NEG_Z :
+                    voxelsToCheck[0] = int3(voxel.x + 1, voxel.y, voxel.z - 1);
+                    voxelsToCheck[1] = int3(voxel.x - 1, voxel.y, voxel.z - 1);
+                    voxelsToCheck[2] = int3(voxel.x, voxel.y + 1, voxel.z - 1);
+                    voxelsToCheck[3] = int3(voxel.x, voxel.y - 1, voxel.z - 1);
                     break;
                 }
 
@@ -446,6 +446,7 @@ Shader "Custom/VoxelRenderer_Optimized"
                                 effect = 1.0 - (distanceToEdge[i] * _VoxelSize) / occlusionDistance;
                             }
 
+                            //Multiply effect by 0.5 because only two voxels can add to the occlusion at the same time
                             occlusion += effect * 0.5;
                         }
                     }
@@ -486,18 +487,18 @@ Shader "Custom/VoxelRenderer_Optimized"
                     //return float4(hit.hitUV.rg, 0, 1);
 
                     //Render from Texture
-                    //float3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
-                    //return float4(textureColor.rgb, 1.0);
+                    //Ffloat3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                    //Freturn float4(textureColor.rgb, 1.0);
 
                     //Render Ambiend Occlusion
-                    //float occlusion = GetAmbientOcclusion(hit);
-                    //return float4(occlusion, occlusion, occlusion, 0);
-
-
                     float occlusion = GetAmbientOcclusion(hit);
-                    float3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
-                    return float4(textureColor.rgb, 1.0) - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .7);
-                    return float4(hit.hitUV.rg, 0, 1) - float4(occlusion, occlusion, occlusion, 0) * 0.25;
+                    return float4(occlusion, occlusion, occlusion, 0);
+
+
+                    // float occlusion = GetAmbientOcclusion(hit);
+                    // float3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                    // return float4(textureColor.rgb, 1.0) - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .7);
+                    // return float4(hit.hitUV.rg, 0, 1) - float4(occlusion, occlusion, occlusion, 0) * 0.25;
 
 
                     //Rendering Method
