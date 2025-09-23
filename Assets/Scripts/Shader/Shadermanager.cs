@@ -20,6 +20,9 @@ public class Shadermanager : MonoBehaviour
 
     public Texture2D faceTexture;
 
+    public RENDER_MODE renderMode = RENDER_MODE.SOLID;
+    public bool ambientOcclusion;
+
 
     //Compute Buffers
     private ComputeBuffer vertexPositionsBuffer;
@@ -294,6 +297,9 @@ public class Shadermanager : MonoBehaviour
         renderMaterial.SetVector("_BoundsMin", boundsMin);
         renderMaterial.SetVector("_BoundsMax", boundsMax);
         renderMaterial.SetTexture("_FaceTexture", faceTexture);
+
+        renderMaterial.SetInt("_RenderMode", (int)renderMode);
+        renderMaterial.SetInt("_AmbientOcclusion", ambientOcclusion ? 1 : 0);
     }
 
 
@@ -336,4 +342,15 @@ public class Shadermanager : MonoBehaviour
             }
         }
     }
+}
+
+
+public enum RENDER_MODE
+{
+    SOLID = 0,
+    POSITION = 1,
+    DEPTH = 2,
+    FACE = 3,
+    UV = 4,
+    TEXTURE = 5
 }

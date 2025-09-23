@@ -24,6 +24,14 @@ Shader "Custom/VoxelRenderer_Optimized"
             #define AXIS_Y 1
             #define AXIS_Z 2
 
+            #define SOLID 0
+            #define POSITION 1
+            #define DEPTH 2
+            #define FACE 3
+            #define UV 4
+            #define TEXTURE 5
+
+
             #define POS_X 0
             #define POS_Y 1
             #define POS_Z 2
@@ -37,7 +45,8 @@ Shader "Custom/VoxelRenderer_Optimized"
             float _VoxelSize;
             float3 _BoundsMin;
             float3 _BoundsMax;
-
+            uint _RenderMode;
+            int _AmbientOcclusion;
 
             TEXTURE2D(_FaceTexture); // Declare the texture
             SAMPLER(sampler_FaceTexture); // Declare the sampler
@@ -256,8 +265,6 @@ Shader "Custom/VoxelRenderer_Optimized"
             }
 
 
-
-
             bool RayMarchVoxel(Ray ray, AABBPoints boundsAABBPoints, out VoxelHit hit)
             {
                 // Step direction and step size along each axis
@@ -454,6 +461,109 @@ Shader "Custom/VoxelRenderer_Optimized"
                 return 1 - occlusion;
             }
 
+
+
+            float4 RenderColor(VoxelHit hit, AABBPoints boundsAABBPoints)
+            {
+                float4 color = (0, 0, 0, 1);
+
+                switch (_RenderMode)
+                {
+                    case SOLID :
+                    color = (1, 1, 1, 1);
+                    break;
+
+                    case POSITION :
+                    color = float4((float3(hit.voxel.xyz) / _Resolution).xyz, 1);
+                    break;
+
+                    case DEPTH :
+                    float depth = GetHitDepth(hit, boundsAABBPoints);
+                    color = float4(depth, depth, depth, 1);
+                    break;
+
+                    case FACE :
+                    switch(hit.hitFace)
+                    {
+                        case POS_X :
+                        color = float4(1, 0, 0, 1);
+                        break;
+                        case POS_Y :
+                        color = float4(0, 1, 0, 1);
+                        break;
+                        case POS_Z :
+                        color = float4(0, 0, 1, 1);
+                        break;
+                        case NEG_X :
+                        color = float4(1, 1, 0, 1);
+                        break;
+                        case NEG_Y :
+                        color = float4(0, 1, 1, 1);
+                        break;
+                        case NEG_Z :
+                        color = float4(1, 0, 1, 1);
+                        break;
+                        default :
+                        color = float4(0, 0, 0, 1);
+                        break;
+                    }
+                    break;
+
+                    case UV :
+                    color = float4(hit.hitUV.rg, 0, 1);
+                    break;
+
+                    case TEXTURE :
+                    float3 textureColor;
+                    switch(hit.hitFace)
+                    {
+                        case POS_X :
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        color = float4(textureColor.rgb, 1.0);
+                        break;
+                        case POS_Y :
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        color = float4(textureColor.rgb, 1.0);
+                        break;
+                        case POS_Z :
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        color = float4(textureColor.rgb, 1.0);
+                        break;
+                        case NEG_X :
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        color = float4(textureColor.rgb, 1.0);
+                        break;
+                        case NEG_Y :
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        color = float4(textureColor.rgb, 1.0);
+                        break;
+                        case NEG_Z :
+                        textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
+                        color = float4(textureColor.rgb, 1.0);
+                        break;
+                        default :
+                        color = float4(0, 0, 0, 1);
+                        break;
+                    }
+                    break;
+
+                    default :
+                    color = float4(0, 0, 0, 1);
+                    break;
+                }
+
+                if(_AmbientOcclusion > 0 && _RenderMode != DEPTH)
+                {
+                    float occlusion = GetAmbientOcclusion(hit);
+                    color = color - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .7);
+                }
+
+                return color;
+            }
+
+
+
+
             half4 frag(Varyings IN) : SV_Target
             {
                 float depth = SampleSceneDepth(IN.texcoord);
@@ -476,53 +586,10 @@ Shader "Custom/VoxelRenderer_Optimized"
                 VoxelHit hit;
                 if (RayMarchVoxel(ray, boundsAABBPoints, hit))
                 {
-                    //Renders the voxel position
-                    //return float4((float3(hit.voxel.xyz) / _Resolution).xyz, 1);
-
-                    //Renders the Scene Depth
-                    //float depth = GetHitDepth(hit, boundsAABBPoints);
-                    //return float4(depth, depth, depth, 1);
-
-                    //Renders the Hit face UV coordiantes
-                    //return float4(hit.hitUV.rg, 0, 1);
-
-                    //Render from Texture
-                    //Ffloat3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
-                    //Freturn float4(textureColor.rgb, 1.0);
-
-                    //Render Ambiend Occlusion
-                    float occlusion = GetAmbientOcclusion(hit);
-                    return float4(occlusion, occlusion, occlusion, 0);
-
-
-                    // float occlusion = GetAmbientOcclusion(hit);
-                    // float3 textureColor = SAMPLE_TEXTURE2D(_FaceTexture, sampler_FaceTexture, hit.hitUV).rgb;
-                    // return float4(textureColor.rgb, 1.0) - ((1 - float4(occlusion, occlusion, occlusion, 0)) * .7);
-                    // return float4(hit.hitUV.rg, 0, 1) - float4(occlusion, occlusion, occlusion, 0) * 0.25;
-
-
-                    //Rendering Method
-                    switch(hit.hitFace)
-                    {
-                        case POS_X :
-                        return float4(1, 0, 0, 1);
-                        case POS_Y :
-                        return float4(0, 1, 0, 1);
-                        case POS_Z :
-                        return float4(0, 0, 1, 1);
-                        case NEG_X :
-                        return float4(1, 1, 0, 1);
-                        case NEG_Y :
-                        return float4(0, 1, 1, 1);
-                        case NEG_Z :
-                        return float4(1, 0, 1, 1);
-                        default :
-                        return float4(0, 0, 0, 1);
-                    }
-
-
-                    return float4(1, 1, 1, 1); // Hit voxel
+                    //Retunrs a color based on the render Mode
+                    return RenderColor(hit, boundsAABBPoints);
                 }
+                //Return scene color when ray does not hit a voxel
                 else
                 {
                     return SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, IN.texcoord);
