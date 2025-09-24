@@ -15,6 +15,7 @@ public class Shadermanager : MonoBehaviour
     [Header("Settings")]
     [Min(1)]
     public int resolution = 1;
+    private VOXELMETHOD voxelMethod;
     [Min(2)]
     public int chunkLimit = 100;
 
@@ -58,28 +59,28 @@ public class Shadermanager : MonoBehaviour
     void Start()
     {
         GetKernelIDs();
-        DispatchVoxelize();
-        AssingValuesToRenderer();
-        if (drawVoxelGizmos)
-        {
-            DebugReadBackRenderTexture();
-        }
+      // DispatchVoxelize();
+      // AssingValuesToRenderer();
+      // if (drawVoxelGizmos)
+      // {
+      //     DebugReadBackRenderTexture();
+      // }
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (lastReslolution != resolution)
-        {
-            DispatchVoxelize();
-            AssingValuesToRenderer();
-            if (drawVoxelGizmos)
-            {
-                DebugReadBackRenderTexture();
-            }
-        }
-
-        lastReslolution = resolution;
+      //  if (lastReslolution != resolution)
+      //  {
+      //      DispatchVoxelize();
+      //      AssingValuesToRenderer();
+      //      if (drawVoxelGizmos)
+      //      {
+      //          DebugReadBackRenderTexture();
+      //      }
+      //  }
+//
+      //  lastReslolution = resolution;
 
     }
 
@@ -310,6 +311,48 @@ public class Shadermanager : MonoBehaviour
 
 
 
+    public void VoxeliseMesh(Mesh mesh, int resolution, VOXELMETHOD voxelMethod)
+    {
+        this.mesh = mesh;
+        this.resolution = resolution;
+        this.voxelMethod = voxelMethod;
+        DispatchVoxelize();
+
+        UpdateRenderShaderVoxelSettings();
+    }
+
+
+    private void UpdateRenderShaderVoxelSettings()
+    {
+        if (voxelTexture == null)
+        {
+            Debug.LogError("No Voxel Texture Ready");
+            return;
+        }
+
+        //Internal values from the Voxelize shader
+        renderMaterial.SetTexture("_VoxelTexture", voxelTexture);
+        renderMaterial.SetInt("_Resolution", resolution);
+        renderMaterial.SetFloat("_VoxelSize", voxelSize);
+        renderMaterial.SetVector("_BoundsMin", boundsMin);
+        renderMaterial.SetVector("_BoundsMax", boundsMax);
+    }
+
+    public void UpdateRenderShaderRenderSettings(RENDER_MODE renderMode, Texture[] textures, bool ambientOcclusion)
+    {
+        renderMaterial.SetInt("_RenderMode", (int)renderMode);
+
+        for (int i = 0; i < textures.Length; i++)
+        {
+            renderMaterial.SetTexture("_FaceTexture_" + i.ToString(), textures[i]);
+        }
+
+        //Disable Ambient Occlusion if render mode is set to DEPTH
+        renderMaterial.SetInt("_AmbientOcclusion", ambientOcclusion && !(renderMode == RENDER_MODE.DEPTH) ? 1 : 0);
+    }
+
+
+
 
 
     void OnDestroy()
@@ -359,4 +402,13 @@ public enum RENDER_MODE
     FACE = 3,
     UV = 4,
     TEXTURE = 5
+}
+
+
+public enum VOXELMETHOD
+{
+    VOLUME = 0,
+    VOLUME_COMPRESSED = 1,
+    SHELL = 2,
+    SHELL_COMPRESSED = 3
 }

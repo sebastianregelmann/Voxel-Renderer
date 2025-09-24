@@ -1224,7 +1224,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   shader: {fileID: 7200000, guid: 75ec3187f1ba88a40b85b30076607471, type: 3}
   renderMaterial: {fileID: 2100000, guid: a1e4648ec72a68e46ba9fa6cc04a45bc, type: 2}
-  mesh: {fileID: 886309165323486958, guid: 35d6c2b3c128fbf4783c2b0c3feaba41, type: 3}
+  mesh: {fileID: 4844476836263319303, guid: 305fb49419ed9484484f87c92b23cde9, type: 3}
   resolution: 25
   chunkLimit: 1000
   faceTexture: {fileID: 2800000, guid: 12406cff08aae2c4c8eff668d2fa2859, type: 3}
@@ -1336,7 +1336,19 @@ MonoBehaviour:
   m_Group: {fileID: 0}
   onValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 9117160134982835651}
+        m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
+        m_MethodName: ChangeAmbientOcclusion
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   m_IsOn: 0
 --- !u!1 &374891232
 GameObject:
@@ -2876,7 +2888,7 @@ GameObject:
   - component: {fileID: 1059227058}
   - component: {fileID: 1059227057}
   m_Layer: 5
-  m_Name: Mesh Selecttion
+  m_Name: Voxel Mode Selecttion
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2954,13 +2966,29 @@ MonoBehaviour:
   m_Value: 0
   m_Options:
     m_Options:
+    - m_Text: Volume
+      m_Image: {fileID: 0}
+    - m_Text: Volume_Compressed
+      m_Image: {fileID: 0}
     - m_Text: Shell
       m_Image: {fileID: 0}
-    - m_Text: Volume
+    - m_Text: Shell_Compressed
       m_Image: {fileID: 0}
   m_OnValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 9117160134982835651}
+        m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
+        m_MethodName: ChangeVoxelizeMethodSelection
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   m_AlphaFadeSpeed: 0.15
 --- !u!114 &1059227058
 MonoBehaviour:
@@ -4330,7 +4358,19 @@ MonoBehaviour:
       m_Image: {fileID: 0}
   m_OnValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 9117160134982835651}
+        m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
+        m_MethodName: ChangeRenderMode
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   m_AlphaFadeSpeed: 0.15
 --- !u!114 &1381021563
 MonoBehaviour:
@@ -4958,7 +4998,19 @@ MonoBehaviour:
       m_Image: {fileID: 0}
   m_OnValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 9117160134982835651}
+        m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
+        m_MethodName: ChangeTextureSelection
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   m_AlphaFadeSpeed: 0.15
 --- !u!114 &1490318137
 MonoBehaviour:
@@ -5354,13 +5406,13 @@ MonoBehaviour:
   m_MinValue: 20
   m_MaxValue: 1000
   m_WholeNumbers: 0
-  m_Value: 100
+  m_Value: 30
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 9117160134982835651}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
-        m_MethodName: ScaleChanged
+        m_MethodName: ChangeVoxelResolution
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -6825,7 +6877,19 @@ MonoBehaviour:
       m_Image: {fileID: 0}
   m_OnValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 9117160134982835651}
+        m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
+        m_MethodName: ChangeMeshSelection
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   m_AlphaFadeSpeed: 0.15
 --- !u!114 &2098527336
 MonoBehaviour:
@@ -6922,7 +6986,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Shell
+  m_text: Volume
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -7182,7 +7246,7 @@ Canvas:
   m_OverrideSorting: 0
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
-  m_VertexColorAlwaysGammaSpace: 0
+  m_VertexColorAlwaysGammaSpace: 1
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -7200,6 +7264,7 @@ GameObject:
   - component: {fileID: 7505888437143482975}
   - component: {fileID: 2819876172631607438}
   - component: {fileID: 3628020786443464993}
+  - component: {fileID: 9117160134982835651}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -7207,6 +7272,46 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &9117160134982835651
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9117160134982835650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03527ba6776323749bdd8fe5bf802d9c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  meshSelectionPanel: {fileID: 2098527333}
+  voxelizeMethodPanel: {fileID: 1059227055}
+  resolutionPanel: {fileID: 1579577100}
+  renderModePanel: {fileID: 1381021560}
+  textureSelectionPanel: {fileID: 1490318134}
+  ambientOcclusionParentPanel: {fileID: 1404663932}
+  ambientOcclusionPanel: {fileID: 374782539}
+  meshes:
+  - {fileID: 4844476836263319303, guid: 305fb49419ed9484484f87c92b23cde9, type: 3}
+  - {fileID: 886309165323486958, guid: 35d6c2b3c128fbf4783c2b0c3feaba41, type: 3}
+  - {fileID: 3694527219041795600, guid: bff9e6a9c1a79834c931018b6319cba2, type: 3}
+  - {fileID: 46604309741045415, guid: 5d5659405495ccb47b0ab4b72bd63fc7, type: 3}
+  - {fileID: -4041163356895272288, guid: 55db7a3b071d2e34d87ea5ea9d0c6502, type: 3}
+  testTexture:
+  - {fileID: 2800000, guid: 3ec9d779d76e1954497c1488d90afbf1, type: 3}
+  - {fileID: 2800000, guid: e260ab48777553c4896c74e796d56c0f, type: 3}
+  - {fileID: 2800000, guid: dfc5cf90d6549904a806277326cefa49, type: 3}
+  - {fileID: 2800000, guid: 48062b7598e857646a1502118d38354e, type: 3}
+  - {fileID: 2800000, guid: 0b99cf2ab77f84645a5d7390d73e6564, type: 3}
+  - {fileID: 2800000, guid: ae296bc19dd8d5d47899b7980773f9e2, type: 3}
+  blockTexture:
+  - {fileID: 2800000, guid: 9b13752492e5c0048b736b28f915bde8, type: 3}
+  - {fileID: 2800000, guid: 2224b8a38c49b194fb56f13083810be4, type: 3}
+  - {fileID: 2800000, guid: 9b13752492e5c0048b736b28f915bde8, type: 3}
+  - {fileID: 2800000, guid: 9b13752492e5c0048b736b28f915bde8, type: 3}
+  - {fileID: 2800000, guid: 9b13752492e5c0048b736b28f915bde8, type: 3}
+  - {fileID: 2800000, guid: 9b13752492e5c0048b736b28f915bde8, type: 3}
+  shadermanager: {fileID: 329268510}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
