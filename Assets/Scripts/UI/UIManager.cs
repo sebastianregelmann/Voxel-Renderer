@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -19,7 +20,7 @@ public class UIManager : MonoBehaviour
     //Compents of the UI to read back values
     private TMP_Dropdown meshSelection;
     private TMP_Dropdown voxelizeMethodSelection;
-    private Slider resolutionSlider;
+    private TMP_InputField resolutionInput;
     private TMP_Dropdown renderModeSelection;
     private TMP_Dropdown textureSelection;
     private Toggle ambientOcclusionToggle;
@@ -47,7 +48,7 @@ public class UIManager : MonoBehaviour
         //Get Gameobject components
         meshSelection = meshSelectionPanel.GetComponent<TMP_Dropdown>();
         voxelizeMethodSelection = voxelizeMethodPanel.GetComponent<TMP_Dropdown>();
-        resolutionSlider = resolutionPanel.GetComponent<Slider>();
+        resolutionInput = resolutionPanel.GetComponent<TMP_InputField>();
         renderModeSelection = renderModePanel.GetComponent<TMP_Dropdown>();
         textureSelection = textureSelectionPanel.GetComponent<TMP_Dropdown>();
         ambientOcclusionToggle = ambientOcclusionPanel.GetComponent<Toggle>();
@@ -234,7 +235,30 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private void GetResolution()
     {
-        resolution = Mathf.CeilToInt(resolutionSlider.value);
+        //Check if input field has a value
+        if (string.IsNullOrEmpty(resolutionInput.text))
+        {
+            //Assign min value if input is empty
+            resolution = 1;
+            resolutionInput.text = "1";
+            return;
+        }
+
+        int value = Int32.Parse(resolutionInput.text);
+
+        //Check if value is smaller than min value
+        if (value < 1)
+        {
+            //Assign min value if input is empty
+            resolution = 1;
+            resolutionInput.text = "1";
+            return;
+        }
+        else
+        {
+            //Assign actual value to resolution
+            resolution = value;
+        }
     }
 
 

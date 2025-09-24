@@ -48,10 +48,6 @@ Shader "Custom/VoxelRenderer_Optimized"
             uint _RenderMode;
             int _AmbientOcclusion;
 
-            TEXTURE2D(_FaceTexture); // Declare the texture
-            SAMPLER(sampler_FaceTexture); // Declare the sampler
-
-
             TEXTURE2D(_FaceTexture_0);
             SAMPLER(sampler_FaceTexture_0);
             TEXTURE2D(_FaceTexture_1);
