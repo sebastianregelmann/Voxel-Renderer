@@ -61,6 +61,10 @@ public class Shadermanager : MonoBehaviour
         kernelVoxelizeShell = shader.FindKernel("VoxelizeShell");
     }
 
+
+    /// <summary>
+    /// Sets internal variables related to mesh and resolution
+    /// </summary>
     private void SetMeshRelatedVariables()
     {
         triangleCount = mesh.triangles.Length;
@@ -70,6 +74,10 @@ public class Shadermanager : MonoBehaviour
         voxelSize = Mathf.Max(Mathf.Max(mesh.bounds.size.x, mesh.bounds.size.y), mesh.bounds.size.z) / resolution;
     }
 
+
+    /// <summary>
+    /// Dispatches the uncompressed Voxelize Volume kernel
+    /// </summary>
     private void DispatchVoxelizeVolume()
     {
         if (mesh == null)
@@ -118,6 +126,9 @@ public class Shadermanager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Dispatches the uncompressed Voxelize Shell kernel
+    /// </summary>
     private void DispatchVoxelizeShell()
     {
         if (mesh == null)
@@ -183,9 +194,8 @@ public class Shadermanager : MonoBehaviour
     }
 
 
-
     /// <summary>
-    /// Creates a 3D voxel Texture based on the parameter
+    /// Creates a 3D voxel Texture with data based on the parameter
     /// </summary>
     public void VoxeliseMesh(Mesh mesh, int resolution, VOXELMETHOD voxelMethod)
     {
@@ -233,6 +243,10 @@ public class Shadermanager : MonoBehaviour
         renderMaterial.SetVector("_BoundsMax", boundsMax);
     }
 
+
+    /// <summary>
+    /// Updates Render settings variables in the render Shader
+    /// </summary>
     public void UpdateRenderShaderRenderSettings(RENDER_MODE renderMode, Texture[] textures, bool ambientOcclusion)
     {
         renderMaterial.SetInt("_RenderMode", (int)renderMode);
@@ -247,7 +261,9 @@ public class Shadermanager : MonoBehaviour
     }
 
 
-
+    /// <summary>
+    /// Releases all buffer when code is stopped
+    /// </summary>
     void OnDestroy()
     {
         voxelTexture?.Release();
@@ -262,6 +278,9 @@ public class Shadermanager : MonoBehaviour
 }
 
 
+/// <summary>
+/// Enum that defines the Render mode
+/// </summary>
 public enum RENDER_MODE
 {
     SOLID = 0,
@@ -274,6 +293,9 @@ public enum RENDER_MODE
 }
 
 
+/// <summary>
+/// Enum that defines what method for voxelation is used
+/// </summary>
 public enum VOXELMETHOD
 {
     VOLUME = 0,

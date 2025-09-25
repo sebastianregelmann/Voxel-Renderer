@@ -2,78 +2,96 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
-    public float normalSpeed = 5.0f;
-    public float fastSpeed = 15.0f;
-    public float mouseSensitivity = 2.0f;
-    public float climbSpeed = 5.0f;
+    private Vector3 pivotPosition; // The point to orbit around (like Blender's 3D cursor)
+    public float orbitSpeed = 4f;
+    public float panSpeed = 0.5f;
+    public float scrollSensitivity = 10f;
 
-    private float rotationX = 0.0f;
-    private float rotationY = 0.0f;
-
-    private bool cursorLocked = false;
-
-    void Start()
-    {
-        Vector3 rot = transform.localRotation.eulerAngles;
-        rotationX = rot.y;
-        rotationY = rot.x;
-    }
+    private Vector3 lastMousePosition;
 
     void Update()
     {
-        HandleMouseLook();
-        HandleMovementInput();
+        HandleMouseInput();
+        HandleScrollInput();
     }
 
-    void HandleMouseLook()
+
+    /// <summary>
+    /// Handles the mouse inputs
+    /// </summary>
+    void HandleMouseInput()
     {
-        if (Input.GetMouseButtonDown(1))
+        if (Input.GetMouseButton(0) || Input.GetMouseButton(1)) // LMB or RMB
         {
-            LockCursor(true);
+            Vector3 delta = Input.mousePosition - lastMousePosition;
+
+            if (Input.GetMouseButton(0))
+            {
+                // Panning
+                PanCamera(delta);
+            }
+            else
+            {
+                // Orbiting
+                OrbitCamera(delta);
+            }
         }
-        else if (Input.GetMouseButtonUp(1))
+
+        lastMousePosition = Input.mousePosition;
+    }
+
+
+    /// <summary>
+    /// Moves Camera based on scroll input
+    /// </summary>
+    void HandleScrollInput()
+    {
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (Mathf.Abs(scroll) > 0.0001f)
         {
-            LockCursor(false);
+            Vector3 move = transform.forward * scroll * scrollSensitivity;
+            transform.position += move;
+            pivotPosition += move; // Move the pivot with the camera
         }
-
-        if (!cursorLocked) return;
-
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
-
-        rotationX += mouseX;
-        rotationY -= mouseY;
-        rotationY = Mathf.Clamp(rotationY, -89f, 89f);
-
-        transform.rotation = Quaternion.Euler(rotationY, rotationX, 0.0f);
     }
 
-    void HandleMovementInput()
+
+    /// <summary>
+    /// Rotates the Camera
+    /// </summary>
+    void OrbitCamera(Vector3 delta)
     {
-        float speed = Input.GetKey(KeyCode.LeftShift) ? fastSpeed : normalSpeed;
+        Vector3 angles = new Vector3(-delta.y, delta.x, 0) * orbitSpeed * Time.deltaTime;
 
-        Vector3 direction = new Vector3();
+        // Rotate around pivot position
+        transform.RotateAround(pivotPosition, transform.right, angles.x);
+        transform.RotateAround(pivotPosition, Vector3.up, angles.y);
 
-        if (Input.GetKey(KeyCode.W))
-            direction += transform.forward;
-        if (Input.GetKey(KeyCode.S))
-            direction -= transform.forward;
-        if (Input.GetKey(KeyCode.A))
-            direction -= transform.right;
-        if (Input.GetKey(KeyCode.D))
-            direction += transform.right;
-        if (Input.GetKey(KeyCode.E))
-            direction += Vector3.up;
-        if (Input.GetKey(KeyCode.Q))
-            direction -= Vector3.up;
-
-        transform.position += direction.normalized * speed * Time.deltaTime;
+        // After orbiting, look at pivot again
+        transform.LookAt(pivotPosition);
     }
 
-    void LockCursor(bool isLocked)
+
+    /// <summary>
+    /// Moves the Camera
+    /// </summary>
+    void PanCamera(Vector3 delta)
     {
-        cursorLocked = isLocked;
-        Cursor.lockState = isLocked ? CursorLockMode.Locked : CursorLockMode.None;
-        Cursor.visible = !isLocked;
+        // Move camera and pivot along camera's local axes
+        Vector3 right = transform.right;
+        Vector3 up = transform.up;
+        Vector3 movement = (-right * delta.x + -up * delta.y) * panSpeed * Time.deltaTime;
+
+        transform.position += movement;
+        pivotPosition += movement;
+    }
+
+    /// <summary>
+    /// Updates the Camera Pivot point
+    /// </summary>
+    public void SetCameraPivot(Vector3 centerPoint)
+    {
+        pivotPosition = centerPoint;
+        transform.LookAt(pivotPosition);
     }
 }

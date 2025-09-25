@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
+using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,6 +32,7 @@ public class UIManager : MonoBehaviour
     public Texture2D[] testTexture;
     public Texture2D[] blockTexture;
     public Shadermanager shadermanager;
+    public CameraController cameraController;
 
 
     //Internal variables to keep track of selected values
@@ -82,6 +84,9 @@ public class UIManager : MonoBehaviour
 
         //Toggle UI options to match render mode
         ToggleUIOptions();
+
+        //Set the camera based on the selected mesh
+        SetCameraPivot();
     }
 
 
@@ -95,6 +100,9 @@ public class UIManager : MonoBehaviour
 
         //Call the shadermanager to voxelize the mesh
         shadermanager.VoxeliseMesh(mesh, resolution, voxelMehtod);
+
+        //Change camera pivot based on the meshs center
+        SetCameraPivot();
     }
 
 
@@ -325,5 +333,15 @@ public class UIManager : MonoBehaviour
         {
             ambientOcclusionParentPanel.SetActive(true);
         }
+    }
+
+
+    /// <summary>
+    /// Updates the camera Pivot based on the selected mesh
+    /// </summary>
+    private void SetCameraPivot()
+    {
+        Vector3 centerPoint = mesh.bounds.center;
+        cameraController.SetCameraPivot(centerPoint);
     }
 }
