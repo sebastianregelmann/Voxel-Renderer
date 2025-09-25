@@ -254,6 +254,14 @@ public class UIManager : MonoBehaviour
             resolutionInput.text = "1";
             return;
         }
+        //Check if value is bigger than maximum allowed texture size
+        else if (value > 2048)
+        {
+            //Assign max value if input is empty
+            resolution = 2048;
+            resolutionInput.text = "2048";
+            return;
+        }
         else
         {
             //Assign actual value to resolution

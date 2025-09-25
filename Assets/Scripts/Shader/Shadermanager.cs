@@ -18,6 +18,7 @@ public class Shadermanager : MonoBehaviour
 
     //Kernel Indexes
     private int kernelVoxelize;
+    private int kernelVoxelizeShell;
 
 
     //Helper variables to keep track of mesh data and voxel settings
@@ -57,6 +58,7 @@ public class Shadermanager : MonoBehaviour
     private void GetKernelIDs()
     {
         kernelVoxelize = shader.FindKernel("Voxelize");
+        kernelVoxelizeShell = shader.FindKernel("VoxelizeShell");
     }
 
     private void SetMeshRelatedVariables()
@@ -68,7 +70,7 @@ public class Shadermanager : MonoBehaviour
         voxelSize = Mathf.Max(Mathf.Max(mesh.bounds.size.x, mesh.bounds.size.y), mesh.bounds.size.z) / resolution;
     }
 
-    private void DispatchVoxelize()
+    private void DispatchVoxelizeVolume()
     {
         if (mesh == null)
         {
@@ -116,6 +118,54 @@ public class Shadermanager : MonoBehaviour
     }
 
 
+    private void DispatchVoxelizeShell()
+    {
+        if (mesh == null)
+        {
+            throw new System.Exception("No Mesh Asigned");
+        }
+
+        //Release buffer if old one exists
+        triangleIndicesBuffer?.Release();
+        vertexPositionsBuffer?.Release();
+        voxelTexture?.Release();
+        triangleIndicesBuffer = null;
+        vertexPositionsBuffer = null;
+        voxelTexture = null;
+
+        SetMeshRelatedVariables();
+
+        //Create the Buffers
+        triangleIndicesBuffer = new ComputeBuffer(triangleCount, sizeof(int));
+        vertexPositionsBuffer = new ComputeBuffer(vertexCount, sizeof(float) * 3);
+        voxelTexture = CreateInt3DTexture(resolution, resolution, resolution);
+
+
+        //Set data to the Buffers
+        triangleIndicesBuffer.SetData(mesh.triangles);
+        vertexPositionsBuffer.SetData(mesh.vertices);
+
+        //Assing Buffers for shader
+        shader.SetBuffer(kernelVoxelizeShell, "_TriangleIndicesIn", triangleIndicesBuffer);
+        shader.SetBuffer(kernelVoxelizeShell, "_VertexPositionsIn", vertexPositionsBuffer);
+        shader.SetTexture(kernelVoxelizeShell, "_VoxelTexture", voxelTexture);
+
+        //Assing Variables for the Shader
+        shader.SetInt("_TriangleCount", triangleCount);
+        shader.SetInt("_Resolution", resolution);
+        shader.SetFloat("_VoxelSize", voxelSize);
+        shader.SetVector("_BoundsMin", boundsMin);
+        shader.SetVector("_BoundsMax", boundsMax);
+
+        //Calculate the number of threads dispatched
+        Vector3Int threadGroupSize = GetThreadGroupSize(kernelVoxelizeShell);
+        Vector3Int threadCount = new Vector3Int(Mathf.CeilToInt(triangleCount / threadGroupSize.x), 1, 1);
+
+        //Dispatch the shader
+        shader.Dispatch(kernelVoxelizeShell, threadCount.x, threadCount.y, threadCount.z);
+    }
+
+
     /// <summary>
     /// Creates a 3D RWTexture
     /// </summary>
@@ -138,14 +188,27 @@ public class Shadermanager : MonoBehaviour
     /// Creates a 3D voxel Texture based on the parameter
     /// </summary>
     public void VoxeliseMesh(Mesh mesh, int resolution, VOXELMETHOD voxelMethod)
-    {   
+    {
         //Updates internal mesh settings based on the given paramete
         this.mesh = mesh;
         this.resolution = resolution;
 
-        //Dispatches the shader
-        DispatchVoxelize();
-
+        //Dispatches the shader based on the voxelize method
+        switch (voxelMethod)
+        {
+            case VOXELMETHOD.VOLUME:
+                DispatchVoxelizeVolume();
+                break;
+            case VOXELMETHOD.VOLUME_COMPRESSED:
+                DispatchVoxelizeVolume();
+                break;
+            case VOXELMETHOD.SHELL:
+                DispatchVoxelizeShell();
+                break;
+            case VOXELMETHOD.SHELL_COMPRESSED:
+                DispatchVoxelizeShell();
+                break;
+        }
         //Update settings in the render shader based on the new voxelization
         UpdateRenderShaderVoxelSettings();
     }

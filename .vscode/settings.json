@@ -51,5 +51,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Voxel-Renderer.sln"
+    "dotnet.defaultSolution": "Voxel_Renderer.sln"
 }

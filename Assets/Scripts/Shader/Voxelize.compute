@@ -1,7 +1,6 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel Voxelize
-#pragma kernel VoxelizeChunk
-#pragma kernel ReadBackTexture
+#pragma kernel VoxelizeShell
 
 //Struct Definitions
 struct VertexPosition {
@@ -127,92 +126,128 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
 }
 
 
-[numthreads(8,8,8)]
-void VoxelizeChunk (uint3 id : SV_DispatchThreadID)
+bool AABBIntersectsTriangle(float3 boxMin, float3 boxMax, float3 v0, float3 v1, float3 v2)
 {
-    //Check if thread is in chunk size
-    if(id.x >= _ChunkSize.x || id.y >= _ChunkSize.y || id.z >= _ChunkSize.z)
+    // Using a simple SAT-based test from Tomas Akenine-Möller's method
+    // For simplicity, we will use built-in Unity functions
+
+    // Triangle center and half-size extents
+    float3 boxCenter = (boxMin + boxMax) * 0.5;
+    float3 boxHalfSize = (boxMax - boxMin) * 0.5;
+
+    // Move triangle into box-centered space
+    float3 tv0 = v0 - boxCenter;
+    float3 tv1 = v1 - boxCenter;
+    float3 tv2 = v2 - boxCenter;
+
+    // Triangle edges
+    float3 e0 = tv1 - tv0;
+    float3 e1 = tv2 - tv1;
+    float3 e2 = tv0 - tv2;
+
+    // Test 9 axes from cross-products of edges and box axes
+    float3 f[3] = {e0, e1, e2};
+    float3 a[3] = {float3(1, 0, 0), float3(0, 1, 0), float3(0, 0, 1)};
+
+    [unroll]
+    for (int i = 0; i < 3; i ++)
     {
-        return;
+        for (int j = 0; j < 3; j ++)
+        {
+            float3 axis = cross(f[i], a[j]);
+            float p0 = dot(tv0, axis);
+            float p1 = dot(tv1, axis);
+            float p2 = dot(tv2, axis);
+
+            float r = boxHalfSize.x * abs(dot(float3(1, 0, 0), axis)) +
+            boxHalfSize.y * abs(dot(float3(0, 1, 0), axis)) +
+            boxHalfSize.z * abs(dot(float3(0, 0, 1), axis));
+
+            float minP = min(p0, min(p1, p2));
+            float maxP = max(p0, max(p1, p2));
+
+            if (maxP < -r || minP > r)
+            return false;
+        }
     }
 
+    // Test the AABB’s face normals
+    [unroll]
+    for (int i = 0; i < 3; i ++)
+    {
+        float3 axis = a[i];
+        float minT = min(dot(tv0, axis), min(dot(tv1, axis), dot(tv2, axis)));
+        float maxT = max(dot(tv0, axis), max(dot(tv1, axis), dot(tv2, axis)));
 
-    //Check if id is in Resolution
-    uint3 globalID = id.xyz + _ChunkStart;
-    if(globalID.x >= _Resolution || globalID.y >= _Resolution || globalID.z >= _Resolution)
+        if (minT > boxHalfSize[i] || maxT < -boxHalfSize[i])
+        return false;
+    }
+
+    // Test triangle normal
+    float3 normal = cross(e0, e1);
+    float d = dot(normal, tv0);
+    float r = boxHalfSize.x * abs(normal.x) + boxHalfSize.y * abs(normal.y) + boxHalfSize.z * abs(normal.z);
+
+    if (abs(d) > r)
+    return false;
+
+    return true;
+}
+
+
+[numthreads(512,1,1)]
+void VoxelizeShell (uint3 id : SV_DispatchThreadID)
+{
+    //Exit Eraly
+    if(id.x >= _TriangleCount)
     return;
 
-    float3 centerOffset = _VoxelSize / 2.0;
-    float3 position = float3(globalID.xyz) * _VoxelSize + centerOffset;
+    //Read back the triangle indexes data of the triangle
+    int i0 = _TriangleIndicesIn[id.x * 3 + 0];
+    int i1 = _TriangleIndicesIn[id.x * 3 + 1];
+    int i2 = _TriangleIndicesIn[id.x * 3 + 2];
 
-    // 6 ray directions
-    float3 rayDirs[6] = {
-        float3(1, 0, 0),
-        float3(- 1, 0, 0),
-        float3(0, 1, 0),
-        float3(0, - 1, 0),
-        float3(0, 0, 1),
-        float3(0, 0, - 1)
-    };
+    //Get vertex positions
+    float3 v0 = _VertexPositionsIn[i0].position;
+    float3 v1 = _VertexPositionsIn[i1].position;
+    float3 v2 = _VertexPositionsIn[i2].position;
 
-    uint intersections[6] = {0, 0, 0, 0, 0, 0};
-
-    int insideVotes = 0;
-
-    for (uint tri = 0; tri < _TriangleCount; tri ++)
+    // Adjust if bounds are negative
+    if(_BoundsMin.x < 0 || _BoundsMin.y < 0 || _BoundsMin.z < 0)
     {
-        int i0 = _TriangleIndicesIn[tri * 3 + 0];
-        int i1 = _TriangleIndicesIn[tri * 3 + 1];
-        int i2 = _TriangleIndicesIn[tri * 3 + 2];
+        float3 offset = abs(_BoundsMin);
+        v0 += offset;
+        v1 += offset;
+        v2 += offset;
+    }
 
-        float3 v0 = _VertexPositionsIn[i0].position;
-        float3 v1 = _VertexPositionsIn[i1].position;
-        float3 v2 = _VertexPositionsIn[i2].position;
+    //Calculate bounds of the triangle
+    float3 triMin = min(v0, min(v1, v2));
+    float3 triMax = max(v0, max(v1, v2));
 
-        // Adjust if bounds are negative
-        if(_BoundsMin.x < 0 || _BoundsMin.y < 0 || _BoundsMin.z < 0)
+    //Caculate the triangle bounds in voxel space
+    int3 voxelStart = int3(floor(triMin / _VoxelSize));
+    int3 voxelEnd = int3(ceil(triMax / _VoxelSize));
+
+    // Clamp to voxel texture bounds
+    voxelStart = clamp(voxelStart, int3(0, 0, 0), int3(_Resolution - 1, _Resolution - 1, _Resolution - 1));
+    voxelEnd = clamp(voxelEnd, int3(0, 0, 0), int3(_Resolution - 1, _Resolution - 1, _Resolution - 1));
+
+    for(int x = voxelStart.x; x <= voxelEnd.x; x ++)
+    {
+        for(int y = voxelStart.y; y <= voxelEnd.y; y ++)
         {
-            float3 offset = abs(_BoundsMin);
-            v0 += offset;
-            v1 += offset;
-            v2 += offset;
-        }
-
-        for (int dir = 0; dir < 6; dir ++)
-        {
-            float3 rayDir = rayDirs[dir];
-
-            if (RayIntersectsTriangle(position, rayDir, v0, v1, v2))
+            for(int z = voxelStart.z; z <= voxelEnd.z; z ++)
             {
-                intersections[dir] ++;
+                float3 boxMin = float3(x, y, z) * _VoxelSize;
+                float3 boxMax = boxMin + _VoxelSize;
+
+                if (AABBIntersectsTriangle(boxMin, boxMax, v0, v1, v2))
+                {
+                    int dummy;
+                InterlockedMax(_VoxelTexture[int3(x, y, z)], 1, dummy); }
             }
         }
     }
-
-
-    // Parity check all axis
-    for (int dir = 0; dir < 6; dir ++)
-    {
-        if ((intersections[dir] % 2) == 1)
-        {
-            insideVotes ++;
-        }
-    }
-
-    // Majority rule: at least 3/6 say "inside"
-    bool inMesh = insideVotes >= 3;
-    _VoxelTexture[globalID.xyz] = inMesh ? 1 : 0;
 }
 
-
-RWStructuredBuffer<int> _ReadBackBuffer;
-
-[numthreads(8,8,8)]
-void ReadBackTexture (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution) return;
-
-    int value = _VoxelTexture[id.xyz].r;
-    int index = id.x + id.y * _Resolution + id.z * _Resolution * _Resolution;
-    _ReadBackBuffer[index] = value;
-}
