@@ -192,6 +192,9 @@ public class UIManager : MonoBehaviour
             case 5:
                 renderMode = RENDER_MODE.TEXTURE;
                 break;
+            case 6:
+                renderMode = RENDER_MODE.LOCAL_POS;
+                break;
         }
     }
 

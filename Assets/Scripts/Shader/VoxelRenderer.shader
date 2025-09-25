@@ -30,6 +30,7 @@ Shader "Custom/VoxelRenderer_Optimized"
             #define FACE 3
             #define UV 4
             #define TEXTURE 5
+            #define LOCAL_POS 6
 
 
             #define POS_X 0
@@ -556,6 +557,12 @@ Shader "Custom/VoxelRenderer_Optimized"
                         color = float4(0, 0, 0, 1);
                         break;
                     }
+                    break;
+
+                    case LOCAL_POS :
+                    float3 voxelMin = _BoundsMin + float3(hit.voxel) * _VoxelSize;
+                    float3 localPos = (hit.hitPoint - voxelMin) / _VoxelSize;
+                    color = float4(localPos.xyz, 1.0);
                     break;
 
                     default :

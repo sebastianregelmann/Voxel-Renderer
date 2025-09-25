@@ -4707,6 +4707,8 @@ MonoBehaviour:
       m_Image: {fileID: 0}
     - m_Text: Texture
       m_Image: {fileID: 0}
+    - m_Text: Local Position
+      m_Image: {fileID: 0}
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls:

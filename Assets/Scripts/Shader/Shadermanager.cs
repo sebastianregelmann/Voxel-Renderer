@@ -269,7 +269,8 @@ public enum RENDER_MODE
     DEPTH = 2,
     FACE = 3,
     UV = 4,
-    TEXTURE = 5
+    TEXTURE = 5,
+    LOCAL_POS = 6
 }
 
 
