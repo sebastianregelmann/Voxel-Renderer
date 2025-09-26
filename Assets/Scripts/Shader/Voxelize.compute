@@ -29,14 +29,16 @@ RWTexture3D<int> _VoxelTexture;
 //Checks if a ray intersects with a triangle
 bool RayIntersectsTriangle(float3 rayOrigin, float3 rayDir, float3 v0, float3 v1, float3 v2)
 {
-    const float EPSILON = 0.0001;
+    float EPSILON = 0.0001;
     float3 edge1 = v1 - v0;
     float3 edge2 = v2 - v0;
     float3 h = cross(rayDir, edge2);
     float a = dot(edge1, h);
 
     if (abs(a) < EPSILON)
-    return false; // Ray is parallel to triangle
+    {
+        return false; // Ray is parallel to triangle
+    }
 
     float f = 1.0 / a;
     float3 s = rayOrigin - v0;
@@ -155,10 +157,8 @@ bool AABBIntersectsTriangle(float3 boxMin, float3 boxMax, float3 v0, float3 v1, 
     float3 f[3] = {e0, e1, e2};
     float3 a[3] = {float3(1, 0, 0), float3(0, 1, 0), float3(0, 0, 1)};
 
-    [unroll]
     for (int i = 0; i < 3; i ++)
     {
-        [unroll]
         for (int j = 0; j < 3; j ++)
         {
             float3 axis = cross(f[i], a[j]);
@@ -254,7 +254,7 @@ void VoxelizeShell (uint3 id : SV_DispatchThreadID)
 
                 //Check if triangle intersects with the voxel
                 if (AABBIntersectsTriangle(boxMin, boxMax, v0, v1, v2))
-                {   
+                {
                     //Atomic add if triangle intersects
                     int dummy;
                     InterlockedMax(_VoxelTexture[int3(x, y, z)], 1, dummy);
