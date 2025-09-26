@@ -26,7 +26,7 @@ uint3 _ChunkSize;
 RWTexture3D<int> _VoxelTexture;
 
 
-
+//Checks if a ray intersects with a triangle
 bool RayIntersectsTriangle(float3 rayOrigin, float3 rayDir, float3 v0, float3 v1, float3 v2)
 {
     const float EPSILON = 0.0001;
@@ -57,16 +57,18 @@ bool RayIntersectsTriangle(float3 rayOrigin, float3 rayDir, float3 v0, float3 v1
 }
 
 
+//Kernel to voxelize as a voulume (voxelize also inside of the mesh)
 [numthreads(8,8,8)]
 void Voxelize (uint3 id : SV_DispatchThreadID)
 {
     if(id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution)
     return;
 
+    //Calculate the center position of the current voxel
     float3 centerOffset = _VoxelSize / 2.0;
     float3 position = float3(id.xyz) * _VoxelSize + centerOffset;
 
-    // 6 ray directions
+    // 6 ray directions for each face
     float3 rayDirs[6] = {
         float3(1, 0, 0),
         float3(- 1, 0, 0),
@@ -80,6 +82,7 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
 
     int insideVotes = 0;
 
+    //Read back the triangle data from the buffer
     for (uint tri = 0; tri < _TriangleCount; tri ++)
     {
         int i0 = _TriangleIndicesIn[tri * 3 + 0];
@@ -99,6 +102,8 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
             v2 += offset;
         }
 
+        //Each face direction checks how often it intersects with a triangle
+        [unroll]
         for (int dir = 0; dir < 6; dir ++)
         {
             float3 rayDir = rayDirs[dir];
@@ -110,7 +115,7 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
         }
     }
 
-
+    [unroll]
     // Parity check all axis
     for (int dir = 0; dir < 6; dir ++)
     {
@@ -122,15 +127,16 @@ void Voxelize (uint3 id : SV_DispatchThreadID)
 
     // Majority rule: at least 3/6 say "inside"
     bool inMesh = insideVotes >= 3;
+
+    //Write the voxel to the texture
     _VoxelTexture[id.xyz] = inMesh ? 1 : 0;
 }
 
 
+//AABB test if a triangle intersects with a bounding box
 bool AABBIntersectsTriangle(float3 boxMin, float3 boxMax, float3 v0, float3 v1, float3 v2)
 {
     // Using a simple SAT-based test from Tomas Akenine-Möller's method
-    // For simplicity, we will use built-in Unity functions
-
     // Triangle center and half-size extents
     float3 boxCenter = (boxMin + boxMax) * 0.5;
     float3 boxHalfSize = (boxMax - boxMin) * 0.5;
@@ -152,6 +158,7 @@ bool AABBIntersectsTriangle(float3 boxMin, float3 boxMax, float3 v0, float3 v1, 
     [unroll]
     for (int i = 0; i < 3; i ++)
     {
+        [unroll]
         for (int j = 0; j < 3; j ++)
         {
             float3 axis = cross(f[i], a[j]);
@@ -173,13 +180,13 @@ bool AABBIntersectsTriangle(float3 boxMin, float3 boxMax, float3 v0, float3 v1, 
 
     // Test the AABB’s face normals
     [unroll]
-    for (int i = 0; i < 3; i ++)
+    for (int k = 0; k < 3; k ++)
     {
-        float3 axis = a[i];
+        float3 axis = a[k];
         float minT = min(dot(tv0, axis), min(dot(tv1, axis), dot(tv2, axis)));
         float maxT = max(dot(tv0, axis), max(dot(tv1, axis), dot(tv2, axis)));
 
-        if (minT > boxHalfSize[i] || maxT < -boxHalfSize[i])
+        if (minT > boxHalfSize[k] || maxT < -boxHalfSize[k])
         return false;
     }
 
@@ -195,6 +202,7 @@ bool AABBIntersectsTriangle(float3 boxMin, float3 boxMax, float3 v0, float3 v1, 
 }
 
 
+//Kernel to make the voxelitation based on the triangles
 [numthreads(512,1,1)]
 void VoxelizeShell (uint3 id : SV_DispatchThreadID)
 {
@@ -233,19 +241,24 @@ void VoxelizeShell (uint3 id : SV_DispatchThreadID)
     voxelStart = clamp(voxelStart, int3(0, 0, 0), int3(_Resolution - 1, _Resolution - 1, _Resolution - 1));
     voxelEnd = clamp(voxelEnd, int3(0, 0, 0), int3(_Resolution - 1, _Resolution - 1, _Resolution - 1));
 
+    //Loop over each voxel inside the bounds of the triangle
     for(int x = voxelStart.x; x <= voxelEnd.x; x ++)
     {
         for(int y = voxelStart.y; y <= voxelEnd.y; y ++)
         {
             for(int z = voxelStart.z; z <= voxelEnd.z; z ++)
             {
+                //Calculate the bounds of the voxel
                 float3 boxMin = float3(x, y, z) * _VoxelSize;
                 float3 boxMax = boxMin + _VoxelSize;
 
+                //Check if triangle intersects with the voxel
                 if (AABBIntersectsTriangle(boxMin, boxMax, v0, v1, v2))
-                {
+                {   
+                    //Atomic add if triangle intersects
                     int dummy;
-                InterlockedMax(_VoxelTexture[int3(x, y, z)], 1, dummy); }
+                    InterlockedMax(_VoxelTexture[int3(x, y, z)], 1, dummy);
+                }
             }
         }
     }

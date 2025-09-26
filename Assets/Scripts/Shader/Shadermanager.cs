@@ -209,16 +209,11 @@ public class Shadermanager : MonoBehaviour
             case VOXELMETHOD.VOLUME:
                 DispatchVoxelizeVolume();
                 break;
-            case VOXELMETHOD.VOLUME_COMPRESSED:
-                DispatchVoxelizeVolume();
-                break;
             case VOXELMETHOD.SHELL:
                 DispatchVoxelizeShell();
                 break;
-            case VOXELMETHOD.SHELL_COMPRESSED:
-                DispatchVoxelizeShell();
-                break;
         }
+
         //Update settings in the render shader based on the new voxelization
         UpdateRenderShaderVoxelSettings();
     }
@@ -298,8 +293,6 @@ public enum RENDER_MODE
 /// </summary>
 public enum VOXELMETHOD
 {
-    VOLUME = 0,
-    VOLUME_COMPRESSED = 1,
-    SHELL = 2,
-    SHELL_COMPRESSED = 3
+    SHELL = 0,
+    VOLUME = 1
 }

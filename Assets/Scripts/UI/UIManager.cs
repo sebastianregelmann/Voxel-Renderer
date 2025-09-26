@@ -216,16 +216,10 @@ public class UIManager : MonoBehaviour
         switch (index)
         {
             case 0:
-                voxelMehtod = VOXELMETHOD.VOLUME;
-                break;
-            case 1:
-                voxelMehtod = VOXELMETHOD.VOLUME_COMPRESSED;
-                break;
-            case 2:
                 voxelMehtod = VOXELMETHOD.SHELL;
                 break;
-            case 3:
-                voxelMehtod = VOXELMETHOD.SHELL_COMPRESSED;
+            case 1:
+                voxelMehtod = VOXELMETHOD.VOLUME;
                 break;
         }
     }
